@@ -1,0 +1,6 @@
+output/
+data/ref/*.amb
+data/ref/*.ann
+data/ref/*.bwt
+data/ref/*.pac
+data/ref/*.sa
