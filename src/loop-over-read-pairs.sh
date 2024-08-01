@@ -73,7 +73,7 @@ done
 
 ## parameter expansion option
 for read_1 in "${fastq_dir}/"*"${read_suffix}"; do
-    # remove suffix to retriece file path of sample to which suffix can be added
+    # remove suffix to retrieve file path of sample to which suffix can be added
     sample_path="${read_1%"${read_suffix}"}"
     # remove filepath up to filename to retrieve sample name that can be used to create new named output files
     sample_name="${sample_path##*/}"

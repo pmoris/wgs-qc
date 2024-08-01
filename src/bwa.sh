@@ -47,12 +47,15 @@ threads:                    ${n_threads}
 ###################
 
 # create reference index if it does not yet exist
+# for ref in ${reference_pk_H} ${reference_pk_H} ${reference_human}; do
 for i in "${ref}."{amb,ann,bwt,pac,sa}; do
     if ! [ -f "${i}" ]; then
+        echo "Building BWA index for ${ref}..."
         bwa index "${ref}"
         break
     fi
 done
+# done
 
 # map fastq read pairs
 for r1 in "${fastq_dir}"/*_R1_001.fastq.gz; do
