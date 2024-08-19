@@ -13,9 +13,9 @@
 printf "Script execution started at $(date).\n"
 
 # define required software
-#/scratch/antwerpen/203/vsc20380/mambaforge/bin/activate pf-variant-caller
+# source /data/antwerpen/203/vsc20380/miniforge3/bin/activate wgs
 
-source /scratch/antwerpen/203/vsc20380/mambaforge/etc/profile.d/conda.sh
+source /data/antwerpen/203/vsc20380/miniforge3/etc/profile.d/conda.sh
 conda activate wgs
 
 bash qc.sh
