@@ -1,0 +1,3 @@
+data/fastq-test
+results*/*
+slurm-*.out
