@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 
+#################################################################
+# Script to perform quality control and trimming of fastq reads #
+#################################################################
+
 # set bash strict mode
 set -euo pipefail
 
 # allow debug mode by running `TRACE=1 ./script.sh` - equivalent to `set -x`
 if [[ "${TRACE-0}" == "1" ]]; then set -o xtrace; fi
 
-# get file path of script
-# Otherwise, you would need to make sure to call the script from within the
-# directory where it is stored.
+# get file path of script to allow it to be run from any working directory
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-# Get file path of script and set project root.
-# PROJECT_ROOT=$(realpath "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../")
-# echo "Project root = ${PROJECT_ROOT}"
-
-echo "Script dir = ${SCRIPT_DIR}"
+PROJECT_ROOT=$(realpath "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../")
+echo "Project root = ${PROJECT_ROOT}"
 
 #####################
 # Options and paths #
@@ -24,37 +23,45 @@ echo "Script dir = ${SCRIPT_DIR}"
 n_threads="${SLURM_CPUS_PER_TASK:-8}"
 
 # define in and outputs
-ref_pf="${SCRIPT_DIR}/../data/ref/Pfalciparum/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.fasta"
-ref_pv="${SCRIPT_DIR}/../data/ref/Pvivax/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.fasta"
-ref_pm="${SCRIPT_DIR}/../data/ref/Pmalariae/PlasmoDB-release-68/PlasmoDB-68_PmalariaeUG01_Genome.fasta"
-ref_poc="${SCRIPT_DIR}/../data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.fasta"
-ref_pow="${SCRIPT_DIR}/../data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
-# ref_human="${SCRIPT_DIR}/../data/ref/GRCh38.chr21.fa.gz"
-# ref_concat="${SCRIPT_DIR}/../data/ref/concat.fa.gz"
+ref_human="${PROJECT_ROOT}/data/ref/human/Homo_sapiens.GRCh38.p14.GENCODE.release45/GRCh38.primary_assembly.genome.fa.gz"
+ref_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.fasta"
+ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.fasta"
+ref_pm="${PROJECT_ROOT}/data/ref/Pmalariae/PlasmoDB-release-68/PlasmoDB-68_PmalariaeUG01_Genome.fasta"
+ref_poc="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.fasta"
+ref_pow="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
 
-fastq_dir="${SCRIPT_DIR}/../results/fastp/"
-# reads_human="${SCRIPT_DIR}/../data/fastq/human"
+fastq_dir="${PROJECT_ROOT}/results/fastp/"
+output_dir="${PROJECT_ROOT}/results/"
+bam_dir="${output_dir}/bwa/"
+multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
+# reads_human="${PROJECT_ROOT}/data/fastq/human"
 
-output_dir="${SCRIPT_DIR}/../results/bwa/"
-mkdir -p "${output_dir}"
+# create output directories
+mkdir -p "${bam_dir}"
 
 # check if fastq directory exist
 if [ ! -d "${fastq_dir}" ]; then
     echo "FASTQ input directory (${fastq_dir}) does not exist."
+    exit 1
 fi
 
-# # check if reference fasta file exists
-# if ! [ -f "${ref}" ]; then
-    # echo "Reference fasta file not found (${ref})."
-# fi
+# check if reference fasta files exists
+# for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm}; do
+for ref in ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm}; do
+    if ! [ -f "${ref}" ]; then
+        echo "Reference fasta file not found (${ref})."
+        exit 1
+    fi
+done
 
 # log run options
 printf "
 BWA MEM script | $(basename "${BASH_SOURCE[0]}")
 ==============================================
 
-Output directory:           ${output_dir}
+Output directory:           ${bam_dir}
 FASTQ reads directory:      ${fastq_dir}
+Reference human:            ${ref_human}
 Reference Pfalciparum:      ${ref_pf}
 Reference Pvivax:           ${ref_pv}
 Reference Pmalaria:         ${ref_pm}
@@ -63,12 +70,13 @@ Refence Povale c            ${ref_poc}
 threads:                    ${n_threads}
 "
 
-###################
-# start of script #
-###################
+####################
+# Start of mapping #
+####################
 
 # create reference index if it does not yet exist
 # required for fastq-screen
+# for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
 for ref in ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
         if ! [ -f "${i}" ]; then
@@ -85,32 +93,33 @@ for ref in ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     fi
 done
 
-# for i in "${ref}."{amb,ann,bwt,pac,sa}; do
-    # if ! [ -f "${i}" ]; then
-        # bwa index "${ref}"
-        # break
-    # fi
-# done
-
-# map fastq read pairs
-for r1 in "${fastq_dir}"/*_R1_001.fastp.fastq.gz; do
+# map fastq read pairs using bwa
+for r1 in "${fastq_dir}"/*_R1_001.trim.fastq.gz; do
 
     # get filepath containing basename of each read pair
-    sample_path="${r1%_R1_001.fastp.fastq.gz}"
+    sample_path="${r1%_R1_001.trim.fastq.gz}"
 
     # convert to basename of each read without the filepath prefix
     sample_name="${sample_path##*/}"
 
+    # TODO: modify this to read from samplesheet.csv instead
+    # retrieve lane and sample group
+    sample_lane="${sample_name##*_}"
+    sample_group="${sample_name%%_L*}"
+    sample_flowcell="${sample_group##*_}"
+    sample="${sample_name%%_*}"
+
     # create output filepath for each read pair
-    output_prefix="${output_dir}/${sample_name}"
-    # mkdir -p "${output_prefix}"
+    output_prefix="${bam_dir}/${sample_name}"
 
-    printf "\nProcessing sample %s ...\n\n" "${sample_name}"
+    printf "\nProcessing sample %s, lane %s of sample group %s ...\n\n" "${sample_name}" "${sample_lane}" "${sample_group}"
 
-    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2}' "${SCRIPT_DIR}/samplesheet_bwa.csv")
+    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2}' "${PROJECT_ROOT}/data/samplesheet.csv")
 
     if [[ "${species}" == "pf" ]]; then
         ref="${ref_pf}"
+    elif [[ "${species}" == "pv" ]]; then
+        ref="${ref_pv}"
     elif [[ "${species}" == "pm" ]]; then
         ref="${ref_pm}"
     elif [[ "${species}" == "pow" ]]; then
@@ -118,25 +127,83 @@ for r1 in "${fastq_dir}"/*_R1_001.fastp.fastq.gz; do
     fi
 
     echo "Species is $species, ref is $ref"
-
     echo "Creating bam file: ${output_prefix}.sort.bam"
 
     # map to reference genome
     bwa mem \
         -t "${n_threads}" \
         -Y -K 100000000 \
-        -R "@RG\tID:${sample_name}\tSM:${sample_name}\tPL:ILLUMINA" \
+        -R "@RG\tID:${sample_name}\tSM:${sample}\tPL:ILLUMINA\\tPU:${sample_flowcell}.${sample_lane}\\tLB:${sample_group}" \
         "${ref}" \
-        "${sample_path}_R1_001.fastp.fastq.gz" \
-        "${sample_path}_R2_001.fastp.fastq.gz" |
+        "${sample_path}_R1_001.trim.fastq.gz" \
+        "${sample_path}_R2_001.trim.fastq.gz" |
         # sort and compress to bam
         samtools sort --threads "${n_threads}" \
             -o "${output_prefix}.sort.bam"
 
-    # generate stats
-    samtools index --threads "${n_threads}" "${output_prefix}.sort.bam"
-    samtools stats --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.stats"
-    samtools flagstat --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.flagstat"
-    samtools idxstats --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.idxstats"
+    # # generate stats
+    # samtools index --threads "${n_threads}" "${output_prefix}.sort.bam"
+    # samtools stats --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.stats"
+    # samtools flagstat --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.flagstat"
+    # samtools idxstats --threads "${n_threads}" "${output_prefix}.sort.bam" >"${output_prefix}.sort.bam.idxstats"
 
 done
+
+# picard mark duplicates
+printf "\nMarking duplicates...\n"
+
+jobs=$((${n_threads}/2))
+
+# mark duplicates for each file separately -> requires manual merging afterwards
+# parallel -j "${jobs}" \
+#     gatk --java-options -Xmx$((8))G \
+#         MarkDuplicates \
+#         --INPUT "{}" \
+#         --OUTPUT "${bam_dir}/{/.}.markdup.bam" \
+#         --METRICS_FILE {.}.markdup.metrics \
+#         --REMOVE_DUPLICATES false \
+#     ::: "${bam_dir}"/*.sort.bam
+
+# mark duplicates simultaneously on same sample run across different lanes with automatic concatenation
+
+function add_input_prefix() {
+    # echo ${1};
+    declare -a arr=()
+    for i in "${1}"*.sort.bam; do
+        # echo "looping over ${i}"
+        arr+=( "--INPUT ${i}" )
+    done;
+    echo ${arr[@]}
+}
+
+# ! Note that single quotes are required to avoid the command substitution around the
+# ! add_input_prefix function call from being executed before it is passed to parallel
+for i in "${bam_dir}/"*.sort.bam; do echo "${i%%_L*}"; done | sort -u | \
+    parallel -j "${jobs}" \
+        gatk --java-options -Xmx$((8))G \
+            MarkDuplicates \
+            '$(add_input_prefix {})' \
+            --OUTPUT "{}.sort.markdup.bam" \
+            --METRICS_FILE {}.markdup.metrics \
+            --REMOVE_DUPLICATES false
+
+# for bam in results-testset/bwa/*.sort.bam; do echo "${bam%%_L*}"; done | sort -u | while read -r line ; do array=(${line}*.sort.bam); echo ${array[@]}; done
+
+# └─▶ for bam in results-testset/bwa/*.sort.bam; do echo "${bam%%_L*}"; done | sort -u | while read -r line ; do echo $(cat "sdfgsd" ${line}*.sort.bam); done
+
+# └─▶ for i in results-testset/bwa/*.sort.bam; do echo "${i%%_L*}"; done | sort -u | parallel echo "{}*.sort.bam" "{}"
+
+# # TODO: incorporate into parallel?
+for bam in "${bam_dir}/"*.sort.markdup.bam; do
+    printf "\nCreating index and samtool stats for ${bam}...\n"
+    samtools index --threads "${n_threads}" "${bam}"
+    samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"
+    samtools flagstat --threads "${n_threads}" "${bam}" >"${bam}.flagstat"
+    samtools idxstats --threads "${n_threads}" "${bam}" >"${bam}.idxstats"
+done
+
+# clean up
+rm "${bam_dir}/"*.sort.bam
+
+# aggregate results with multiQC
+multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"

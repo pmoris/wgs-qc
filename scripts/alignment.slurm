@@ -13,8 +13,11 @@
 
 printf "Script execution started at $(date).\n"
 
+# define required software
 source /data/antwerpen/203/vsc20380/miniforge3/etc/profile.d/conda.sh
-conda activate wbc_depletion
+conda activate wgs
+
+module load parallel
 
 # Get file path of script and set project root.
 # Otherwise, you would need to make sure to call the script from within the
@@ -29,6 +32,6 @@ echo "Script dir = ${SCRIPT_DIR}"
 PROJECT_ROOT=$(realpath "${SCRIPT_DIR}/../")
 echo "Project root = ${PROJECT_ROOT}"
 
-bash "${SCRIPT_DIR}/alignment.sh"
+bash "${PROJECT_ROOT}/scripts/alignment.sh"
 
 printf "Script finished at $(date).\n"
