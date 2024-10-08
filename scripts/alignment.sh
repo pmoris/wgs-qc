@@ -175,6 +175,7 @@ function add_input_prefix() {
     done;
     echo ${arr[@]}
 }
+export -f add_input_prefix
 
 # ! Note that single quotes are required to avoid the command substitution around the
 # ! add_input_prefix function call from being executed before it is passed to parallel
