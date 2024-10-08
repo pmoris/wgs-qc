@@ -30,8 +30,8 @@ ref_pm="${PROJECT_ROOT}/data/ref/Pmalariae/PlasmoDB-release-68/PlasmoDB-68_Pmala
 ref_poc="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.fasta"
 ref_pow="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
 
-fastq_dir="${PROJECT_ROOT}/results/fastp/"
 output_dir="${PROJECT_ROOT}/results/"
+fastq_dir="${output_dir}/fastp/"
 bam_dir="${output_dir}/bwa/"
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 # reads_human="${PROJECT_ROOT}/data/fastq/human"
