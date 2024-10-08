@@ -166,10 +166,30 @@ jobs=$((${n_threads}/2))
 
 # mark duplicates simultaneously on same sample run across different lanes with automatic concatenation
 
+# ! Note that the internal loop of the prefix function needs to
+# ! use a glob pattern that includes _L, to avoid libraries sharing
+# ! a prefix ID from being grouped together. E.g., sample_S11_L001 and sample S_1_L001.
+# --INPUT fastq/ANT5670_S11_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S11_L001_R2_001.fastq.gz --INPUT fastq/ANT5670_S1_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S1_L001_R2_001.fastq.gz
+
+# testing:
+# $ for i in "fastq/"*.fastq.gz; do echo "${i%%_L*}"; done | sort -u | while read -r line; do declare -a arr=(); for i in $line*; do arr+=( "--INPUT ${i}" ); done; echo ${arr[@]}; done
+# --INPUT fastq/ANT5670_S11_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S11_L001_R2_001.fastq.gz --INPUT fastq/ANT5670_S1_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S1_L001_R2_001.fastq.gz
+# --INPUT fastq/ANT5670_S11_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S11_L001_R2_001.fastq.gz
+# --INPUT fastq/ANT5670_S261_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S261_L001_R2_001.fastq.gz --INPUT fastq/ANT5670_S261_L002_R1_001.fastq.gz --INPUT fastq/ANT5670_S261_L002_R2_001.fastq.gz
+# --INPUT fastq/ANT6000_S1_L001_R1_001.fastq.gz --INPUT fastq/ANT6000_S1_L001_R2_001.fastq.gz
+
+# $ for i in "fastq/"*.fastq.gz; do echo "${i%%_L*}"; done | sort -u | while read -r line; do declare -a arr=(); for i in ${line}_L*; do arr+=( "--INPUT ${i}" ); done; echo ${arr[@]}; done
+# --INPUT fastq/ANT5670_S1_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S1_L001_R2_001.fastq.gz
+# --INPUT fastq/ANT5670_S11_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S11_L001_R2_001.fastq.gz
+# --INPUT fastq/ANT5670_S261_L001_R1_001.fastq.gz --INPUT fastq/ANT5670_S261_L001_R2_001.fastq.gz --INPUT fastq/ANT5670_S261_L002_R1_001.fastq.gz --INPUT fastq/ANT5670_S261_L002_R2_001.fastq.gz
+# --INPUT fastq/ANT6000_S1_L001_R1_001.fastq.gz --INPUT fastq/ANT6000_S1_L001_R2_001.fastq.gz
+
+# alternatively, change initial loop to report including _ before L (and also L itself?) and then remove it again when creating outputs?
+
 function add_input_prefix() {
     # echo ${1};
     declare -a arr=()
-    for i in "${1}"*.sort.bam; do
+    for i in "${1}_L"*".sort.bam"; do
         # echo "looping over ${i}"
         arr+=( "--INPUT ${i}" )
     done;
