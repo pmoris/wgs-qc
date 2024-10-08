@@ -77,7 +77,7 @@ threads:                    ${n_threads}
 # create reference index if it does not yet exist
 # required for fastq-screen
 # for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
-for ref in ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
+for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
         if ! [ -f "${i}" ]; then
             index_files_found=0
@@ -112,8 +112,6 @@ for r1 in "${fastq_dir}"/*_R1_001.trim.fastq.gz; do
     # create output filepath for each read pair
     output_prefix="${bam_dir}/${sample_name}"
 
-    printf "\nProcessing sample %s, lane %s of sample group %s ...\n\n" "${sample_name}" "${sample_lane}" "${sample_group}"
-
     species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2}' "${PROJECT_ROOT}/data/samplesheet.csv")
 
     if [[ "${species}" == "pf" ]]; then
@@ -126,20 +124,55 @@ for r1 in "${fastq_dir}"/*_R1_001.trim.fastq.gz; do
         ref="${ref_pow}"
     fi
 
-    echo "Species is $species, ref is $ref"
-    echo "Creating bam file: ${output_prefix}.sort.bam"
-
-    # map to reference genome
+    # map to human reference genome first to remove host reads
+    printf "\nMapping raw reads to human reference for sample %s, lane %s of sample group %s ...\n\n" "${sample_name}" "${sample_lane}" "${sample_group}"
+    echo "Creating human bam file: ${output_prefix}.sort.human.bam"
     bwa mem \
         -t "${n_threads}" \
         -Y -K 100000000 \
         -R "@RG\tID:${sample_name}\tSM:${sample}\tPL:ILLUMINA\\tPU:${sample_flowcell}.${sample_lane}\\tLB:${sample_group}" \
-        "${ref}" \
+        "${ref_human}" \
         "${sample_path}_R1_001.trim.fastq.gz" \
         "${sample_path}_R2_001.trim.fastq.gz" |
-        # sort and compress to bam
+    # sort and compress to bam
+        samtools sort --threads "${n_threads}" \
+            -o "${output_prefix}.sort.human.bam"
+
+    # extract all unmapped pairs (both reads unmapped)
+    # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
+    # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
+    printf "\nMapping filtered reads to %s genome for sample %s, lane %s of sample group %s ...\n\n" "${species}" "${sample_name}" "${sample_lane}" "${sample_group}"
+    echo "Creating bam file: ${output_prefix}.sort.bam"
+    samtools view -b -f 12 "${output_prefix}.sort.human.bam" |
+    # convert back to fastq
+        samtools collate -Oun128 - |
+        samtools fastq -OT RG,BC - |
+    # map to plasmodium genome
+    # -CH adds back original read group info
+    # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
+        bwa mem \
+            -t "${n_threads}" \
+            -Y -K 100000000 \
+            -CH <(samtools view -H "${output_prefix}.sort.human.bam" | grep ^@RG) \
+            -p \
+            "${ref}" \
+            - |
+    # sort and compress to bam
         samtools sort --threads "${n_threads}" \
             -o "${output_prefix}.sort.bam"
+
+    # simple mapping method without host removal
+    # # map to reference genome
+    # bwa mem \
+    #     -t "${n_threads}" \
+    #     -Y -K 100000000 \
+    #     -R "@RG\tID:${sample_name}\tSM:${sample}\tPL:ILLUMINA\\tPU:${sample_flowcell}.${sample_lane}\\tLB:${sample_group}" \
+    #     "${ref}" \
+    #     "${sample_path}_R1_001.trim.fastq.gz" \
+    #     "${sample_path}_R2_001.trim.fastq.gz" |
+    # # sort and compress to bam
+    #     samtools sort --threads "${n_threads}" \
+    #         -o "${output_prefix}.sort.bam"
 
     # # generate stats
     # samtools index --threads "${n_threads}" "${output_prefix}.sort.bam"
@@ -223,8 +256,16 @@ for bam in "${bam_dir}/"*.sort.markdup.bam; do
     samtools idxstats --threads "${n_threads}" "${bam}" >"${bam}.idxstats"
 done
 
+for bam in "${bam_dir}/"*.sort.human.bam; do
+    printf "\nCreating index and samtool stats for ${bam}...\n"
+    samtools index --threads "${n_threads}" "${bam}"
+    samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"
+    samtools flagstat --threads "${n_threads}" "${bam}" >"${bam}.flagstat"
+    samtools idxstats --threads "${n_threads}" "${bam}" >"${bam}.idxstats"
+done
+
 # clean up
-rm "${bam_dir}/"*.sort.bam
+rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.human.bam
 
 # aggregate results with multiQC
 multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
