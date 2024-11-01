@@ -181,4 +181,4 @@ fastqc \
 # "${output_dir}/fastp/${sample_name}${read_2_suffix}.fastp.fastq.gz"
 
 # aggregate results with multiQC
-multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+# multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"

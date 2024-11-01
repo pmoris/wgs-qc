@@ -75,7 +75,6 @@ threads:                    ${n_threads}
 ####################
 
 # create reference index if it does not yet exist
-# required for fastq-screen
 # for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
 for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
@@ -122,6 +121,8 @@ for r1 in "${fastq_dir}"/*_R1_001.trim.fastq.gz; do
         ref="${ref_pm}"
     elif [[ "${species}" == "pow" ]]; then
         ref="${ref_pow}"
+    elif [[ "${species}" == "poc" ]]; then
+        ref="${ref_poc}"
     fi
 
     # map to human reference genome first to remove host reads
@@ -268,4 +269,4 @@ done
 rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.human.bam
 
 # aggregate results with multiQC
-multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+# multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
