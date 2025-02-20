@@ -1,8 +1,8 @@
 # sp:
-    # fastqc/data:
-      # fn: "fastqc_data.txt"
-    # fastqc/zip:
-      # fn: "*_fastqc.zip"
+# fastqc/data:
+# fn: "fastqc_data.txt"
+# fastqc/zip:
+# fn: "*_fastqc.zip"
 module_order:
   - fastqc:
       name: "FastQC (trimmed)"
@@ -10,10 +10,12 @@ module_order:
       info: "This section of the report shows FastQC results after adapter trimming."
       target: ""
       path_filters:
-        - "*fastp_fastqc.zip"
+        - "*trim_fastqc.zip"
   - fastqc:
       name: "FastQC (raw)"
       anchor: "fastqc_raw"
       path_filters:
-        - "*1_fastqc.zip"
+        - "*R[1,2]_fastqc.zip"
+  - picard_config:
+      s_name_filenames: true
 plots_force_interactive: true
