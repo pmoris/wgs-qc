@@ -28,3 +28,9 @@ Created via:
     done
 
     rm out_R*.fastq.gz pf_R*.fastq.gz human_R*.fastq.gz
+
+Mixed human-pf samples were created by running:
+
+    for i in ../human/human_part_00*.fastq.gz; do cat ${i} ${i//human/pf} > ${i//human/human-pf}; done
+
+And then manually renaming them so that there were two lanes/runs per sample.
