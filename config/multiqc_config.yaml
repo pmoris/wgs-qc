@@ -15,5 +15,7 @@ module_order:
       name: "FastQC (raw)"
       anchor: "fastqc_raw"
       path_filters:
-        - "*1_fastqc.zip"
+        - "*R[1,2]_fastqc.zip"
+  - picard_config:
+      s_name_filenames: true
 plots_force_interactive: true
