@@ -33,6 +33,7 @@ ref_pow="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_Povalew
 output_dir="${PROJECT_ROOT}/results/"
 fastq_dir="${output_dir}/fastp/"
 bam_dir="${output_dir}/bwa/"
+
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 # reads_human="${PROJECT_ROOT}/data/fastq/human"
 
@@ -41,7 +42,7 @@ mkdir -p "${bam_dir}"
 
 # check if fastq directory exist
 if [ ! -d "${fastq_dir}" ]; then
-    echo "FASTQ input directory (${fastq_dir}) does not exist."
+    echo "Trimmed FASTQ input directory (${fastq_dir}) does not exist."
     exit 1
 fi
 
@@ -111,7 +112,7 @@ for r1 in "${fastq_dir}"/*_R1_001.trim.fastq.gz; do
     # create output filepath for each read pair
     output_prefix="${bam_dir}/${sample_name}"
 
-    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2}' "${PROJECT_ROOT}/data/samplesheet.csv")
+    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${PROJECT_ROOT}/data/samplesheet.csv")
 
     if [[ "${species}" == "pf" ]]; then
         ref="${ref_pf}"
@@ -187,6 +188,15 @@ done
 printf "\nMarking duplicates...\n"
 
 jobs=$((${n_threads}/2))
+if [ -n "${SLURM_MEM_PER_NODE-}" ]; then
+    mem=$((${SLURM_MEM_PER_NODE}/1000/${jobs}))
+elif [ -n "${SLURM_MEM_PER_CPU-}" ]; then
+    mem=$((${SLURM_MEM_PER_CPU}*2/1000))
+else
+    mem=4
+fi
+
+printf "\nUsing %s GB of memory per job (n_jobs = %s)\n" "${mem}" "${jobs}"
 
 # mark duplicates for each file separately -> requires manual merging afterwards
 # parallel -j "${jobs}" \
@@ -233,9 +243,10 @@ export -f add_input_prefix
 
 # ! Note that single quotes are required to avoid the command substitution around the
 # ! add_input_prefix function call from being executed before it is passed to parallel
+# TODO: RAM should be calculated
 for i in "${bam_dir}/"*.sort.bam; do echo "${i%%_L*}"; done | sort -u | \
     parallel -j "${jobs}" \
-        gatk --java-options -Xmx$((8))G \
+        gatk --java-options -Xmx${mem}G \
             MarkDuplicates \
             '$(add_input_prefix {})' \
             --OUTPUT "{}.sort.markdup.bam" \
@@ -269,4 +280,4 @@ done
 rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.human.bam
 
 # aggregate results with multiQC
-# multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
