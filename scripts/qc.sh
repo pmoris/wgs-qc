@@ -7,7 +7,7 @@
 # set bash strict mode
 set -euo pipefail
 
-# allow debug mode by running `TRACE=1 ./script.sh` - equivalent to `set -x`
+# allow debug mode by running `TRACE=1 ./script.sh`
 if [[ "${TRACE-0}" == "1" ]]; then set -x; fi
 
 # get file path of project root to allow it to be run from any working directory
@@ -29,9 +29,11 @@ n_threads="${SLURM_CPUS_PER_TASK:-8}"
 fastq_dir="${PROJECT_ROOT}/data/fastq/"
 output_dir="${PROJECT_ROOT}/results/"
 
+# config files
 fastq_screen_conf="${PROJECT_ROOT}/config/fastq-screen.conf"
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 
+# reference files
 ref_human="${PROJECT_ROOT}/data/ref/human/Homo_sapiens.GRCh38.p14.GENCODE.release45/GRCh38.primary_assembly.genome.fa.gz"
 ref_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.fasta"
 ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.fasta"
@@ -103,7 +105,7 @@ done
 # note that --threads option only works when providing
 # multiple files, i.e. use glob instead of loop
 # (alternatively use parallel:
-# `find *.fq | parallel -j 10 "fastqc {} --outdir ...` or find exec
+# `find *.fq | parallel -j 10 "fastqc {} --outdir ...` or find exec )
 echo "Running FastQC prior to trimming..."
 fastqc \
     --threads "${n_threads}" \
@@ -111,6 +113,7 @@ fastqc \
     "${fastq_dir}/"*.fastq.gz
 
 # run fastq-screen (threads option inherited by bwa/bowtie)
+# TODO: use only species-specific database
 echo "Running FastQ Screen..."
 for read in "${fastq_dir}/"*.fastq.gz; do
     fastq_screen \
@@ -152,7 +155,8 @@ done
 #     # --merge                          for paired-end input, merge each pair of reads into a single read if they are overlapped. The merged reads will be written to the file given by --merged_out, the unmerged reads will be written to the files specified by --out1 and --out2. The merging mode is disabled by default.
 # done
 
-# TODO parallel option
+# TODO parallel option {} is incompatible with complex substitutions and variables
+# solution could be to loop through basenames and extend them as necessary, rather than relying on {} syntax
 echo "Running fastp using parallel..."
 find "${fastq_dir}" -name *"R1_001.fastq.gz" |
     parallel -j $((${n_threads} / 2)) --plus \
@@ -170,6 +174,10 @@ find "${fastq_dir}" -name *"R1_001.fastq.gz" |
         --length_required 15 \
         --thread 2
         # --out2 '{= s:.*/::; s:\.[^/.]+$::; s:\.[^/.]+$::; s/R1/R2/ =}'.trim.fastq.gz
+
+        # --adapter_sequence=AGATCGGAAGAGCACACGTCTGAACTCCAGTCA \
+        # --adapter_sequence_r2=AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT \
+
 
 # re-run qc after trimming
 echo "Re-running FastQC after trimming..."

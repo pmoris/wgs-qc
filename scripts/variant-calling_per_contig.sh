@@ -122,7 +122,7 @@ for bam in "${bam_dir}/"*.sort.markdup.bam; do
         ref="${ref_poc}"
     fi
 
-    # parallellize by chromosome
+    # parallellize by contig
     jobs=$((${n_threads}/4))
     if [ -n "${SLURM_MEM_PER_NODE-}" ]; then
         mem=$((${SLURM_MEM_PER_NODE}/1000/${jobs}))
