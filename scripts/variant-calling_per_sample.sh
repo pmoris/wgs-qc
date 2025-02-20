@@ -37,7 +37,7 @@ vcf_dir="${output_dir}/gatk/"
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 
 # create output directories
-mkdir -p "${vcf_dir}"
+mkdir -p "${vcf_dir}" "${vcf_dir}/haplotype_caller" "${vcf_dir}/sample_map"
 
 # check if bam directory exist
 if [ ! -d "${bam_dir}" ]; then
@@ -59,8 +59,8 @@ printf "
 GATK variant calling script | $(basename "${BASH_SOURCE[0]}")
 ==============================================
 
-Output directory:           ${bam_dir}
-FASTQ reads directory:      ${fastq_dir}
+Output directory:           ${vcf_dir}
+BAM directory:              ${bam_dir}
 Reference human:            ${ref_human}
 Reference Pfalciparum:      ${ref_pf}
 Reference Pvivax:           ${ref_pv}
@@ -70,11 +70,13 @@ Refence Povale c            ${ref_poc}
 threads:                    ${n_threads}
 "
 
-####################
-# Start of mapping #
-####################
+############################
+# Start of variant calling #
+############################
 
-# create reference fai and dict files if they do not yet exist
+# TODO: store output files in per-species folder (starting from QC or after alignment/merging) - avoids need to check for species in samplesheet and simpler loop for genomicsdbimport (all files inside a specific species folder)
+
+# Create reference fai and dict files if they do not yet exist
 for ref in ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     index_files_found=1
     if ! [ -f "${ref}.fai" ]; then
@@ -97,7 +99,7 @@ for ref in ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     fi
 done
 
-# function to call variants for a single sample
+# Create function to call variants for a single sample
 function haplotype_caller() {
     bam=${1}
 
@@ -122,30 +124,137 @@ function haplotype_caller() {
     gatk --java-options "-Xmx${mem}g" HaplotypeCaller \
         -R "${ref}" \
         -I "${bam}" \
-        -O "${vcf_dir}/${sample_name}.g.vcf.gz" \
+        -O "${vcf_dir}/haplotype_caller/${sample_name}.g.vcf.gz" \
         --native-pair-hmm-threads 4 \
         -ERC GVCF
 }
 export -f haplotype_caller
 
-# parallellize variant calling across samples
+# Parallellize variant calling across samples
 jobs=$((${n_threads}/4))
 if [ -n "${SLURM_MEM_PER_NODE-}" ]; then
     mem=$((${SLURM_MEM_PER_NODE}/1000/${jobs}))
 elif [ -n "${SLURM_MEM_PER_CPU-}" ]; then
-    mem=$((${SLURM_MEM_PER_CPU}*4))
+    mem=$((${SLURM_MEM_PER_CPU}/1000*4)) # TODO divide by 1000?
 else
     mem=4
 fi
 
-# make variables required by function available
+# Make variables required by function available
 export PROJECT_ROOT vcf_dir mem ref_pf ref_pk ref_pv ref_pm ref_poc ref_pow
 
+# Call variants per sample
 printf "\nParallellizing across ${jobs} jobs and assigning each ${mem}G of memory...\n"
-
 parallel -j "${jobs}" \
     haplotype_caller "{}" \
     ::: "${bam_dir}"/*.sort.markdup.bam
 
+# Create species groups for genomicsdbimport
+# declare -a pf_array=()
+# declare -a pv_array=()
+# declare -a pm_array=()
+# declare -a poc_array=()
+# declare -a pow_array=()
+> "${vcf_dir}/sample_map/pf.sample_map"
+> "${vcf_dir}/sample_map/pv.sample_map"
+> "${vcf_dir}/sample_map/pm.sample_map"
+> "${vcf_dir}/sample_map/poc.sample_map"
+> "${vcf_dir}/sample_map/pow.sample_map"
+
+# Assign vcf files per species
+for gvcf in "${vcf_dir}/haplotype_caller/"*.g.vcf.gz; do
+	sample_name=$(basename ${gvcf} .g.vcf.gz)
+    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${PROJECT_ROOT}/data/samplesheet.csv")
+
+    printf "\n${sample_name} is $species"
+
+    if [[ "${species}" == "pf" ]]; then
+        # pf_array+=( "${gvcf}" )
+        echo "${sample_name}"$'\t'"${gvcf}" >> "${vcf_dir}/sample_map/pf.sample_map"
+    elif [[ "${species}" == "pv" ]]; then
+        # pv_array+=( "${gvcf}" )
+        echo "${sample_name}"$'\t'"${gvcf}" >> "${vcf_dir}/sample_map/pv.sample_map"
+    elif [[ "${species}" == "pm" ]]; then
+        # pm_array+=( "${gvcf}" )
+        echo "${sample_name}"$'\t'"${gvcf}" >> "${vcf_dir}/sample_map/pm.sample_map"
+    elif [[ "${species}" == "pow" ]]; then
+        # pow_array+=( "${gvcf}" )
+        echo "${sample_name}"$'\t'"${gvcf}" >> "${vcf_dir}/sample_map/pow.sample_map"
+    elif [[ "${species}" == "poc" ]]; then
+        # poc_array+=( "${gvcf}" )
+        echo "${sample_name}"$'\t'"${gvcf}" >> "${vcf_dir}/sample_map/poc.sample_map"
+    fi
+done
+
+# Create tmp and genomicsdb-workspace-path directories
+# ! tmp should already exist, genomicsdb-workspace-path must be non-existent or empty
+mkdir -p "${vcf_dir}/tmp"   # "${vcf_dir}/workspace"
+if [ -d "${vcf_dir}/workspace" ]; then
+    if [ "$(ls -A ${vcf_dir}/workspace)" ]; then
+        echo "GenomicsDBImport workspace folder is not empty..."
+        exit 1
+    fi
+fi
+
+
+# TODO: parallellize
+
+# Combine vcf files per species
+# for sample_map in "${vcf_dir}/sample_map/"*; do
+#     # species=
+
+#     # loop through species names OR extract species name from folder
+
+for species in pf pv pm poc pow; do
+    sample_map="${vcf_dir}/sample_map/${species}.sample_map"
+# ! ! placement matters?
+    if [ ! -s "${sample_map}" ]; then
+        printf "\nNo g.vcf files to combine for ${species}...\n"
+        continue
+    fi
+
+    printf "\n\nCombining $(wc -l ${sample_map} | cut -f1 -d' ') g.vcf files for ${species}..."
+
+    # parallellize across contigs
+    if [[ "${species}" == "pf" ]]; then
+        ref="${ref_pf}"
+    elif [[ "${species}" == "pv" ]]; then
+        ref="${ref_pv}"
+    elif [[ "${species}" == "pm" ]]; then
+        ref="${ref_pm}"
+    elif [[ "${species}" == "pow" ]]; then
+        ref="${ref_pow}"
+    elif [[ "${species}" == "poc" ]]; then
+        ref="${ref_poc}"
+    fi
+
+# # ! --overwrite-existing-genomicsdb-workspace / NA
+
+    cut -f1 "${ref%.fasta}.bed" | \
+    parallel -j "${jobs}" \
+        gatk --java-options -Xmx${mem}G \
+            GenomicsDBImport \
+            --genomicsdb-workspace-path "${vcf_dir}/workspace/{}" \
+            --sample-name-map "${sample_map}" \
+            --tmp-dir "${vcf_dir}/tmp" \
+            --intervals {} \
+            --overwrite-existing-genomicsdb-workspace \
+            --batch-size 50 \
+            --genomicsdb-shared-posixfs-optimizations true
+            # --intervals <genomic-range> \
+            # --intervals <genomic-range> \
+            # ...
+        # optional arguments:
+        # set maximum and initial memory usage: --java-options "-Xmx4g -Xms4g"
+        # number of samples to process simultaneously (affects memory): --batch-size 50
+done
+
+# gatk GenomicsDBImport --java-options '-DGATK_STACKTRACE_ON_USER_EXCEPTION=true' --genomicsdb-workspace-path /home/pmoris/itg/projects/summit/summit-wgs-batch-202404/wgs-qc/results//gatk//workspace --sample-name-map /home/pmoris/itg/projects/summit/summit-wgs-batch-202404/wgs-qc/results//gatk//pf.sample_map --tmp-dir /home/pmoris/itg/projects/summit/summit-wgs-batch-202404/wgs-qc/results//gatk//tmp --intervals Pf3D7_07_v3
+
+# TODO: https://gatk.broadinstitute.org/hc/en-us/articles/360056138571-GenomicsDBImport-usage-and-performance-guidelines
+
+# clean up
+rm -r "${vcf_dir}/tmp"
+
 # aggregate results with multiQC
-# multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
