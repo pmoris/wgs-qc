@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# TODO: set suffix as variable
+# TODO: read1/2 suffix is hard-coded here to make it easier to use in parallel
 # TODO: set threads to n_threads
 # TODO: compare with existing scripts
 # TODO: change basename into parameter expansion?
@@ -22,7 +22,7 @@ if [[ "${TRACE-0}" == "1" ]]; then set -x; fi
 # Otherwise, you would need to make sure to call the script from within the directory where it is stored.
 # Alternatively, use absolute paths, but this makes the script less portable.
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-PROJECT_ROOT=$(realpath "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../")
+PROJECT_ROOT=$(realpath "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/../../")
 echo "Project root = ${PROJECT_ROOT}"
 
 #####################
@@ -30,6 +30,7 @@ echo "Project root = ${PROJECT_ROOT}"
 #####################
 
 # read species from command line
+# TODO: or read from samplesheet instead
 species=$1
 
 # set number of threads for downstream tools
@@ -40,6 +41,10 @@ n_threads="${SLURM_CPUS_PER_TASK:-8}"
 # ! trailing slash is needed for `find`
 fastq_dir="${PROJECT_ROOT}/data/fastq/"
 output_dir="${PROJECT_ROOT}/results/"
+
+# config files
+fastq_screen_conf="${PROJECT_ROOT}/config/fastq-screen-${species}.conf"
+multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 
 # reference files
 ref_human="${PROJECT_ROOT}/data/ref/human/Homo_sapiens.GRCh38.p14.GENCODE.release45/GRCh38.primary_assembly.genome.fa.gz"
@@ -65,29 +70,30 @@ elif [[ "${species}" == "pk" ]]; then
     ref_plasmodium="${ref_pk}"
 fi
 
-# config files
-fastq_screen_conf="${PROJECT_ROOT}/config/fastq-screen-${species}.conf"
-multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
-
-# check if fastq directory exist
-if [ ! -d "${fastq_dir}" ]; then
-    echo "FASTQ input directory (${fastq_dir}) does not exist."
-    exit 1
-fi
-
-# check if reference fasta files exists
-for ref in ${ref_human} ${ref_plasmodium} ${ref_phix}; do
-    if ! [ -f "${ref}" ]; then
-        echo "Reference fasta file not found (${ref})."
-        exit 1
-    fi
-done
+# define fastq read suffix - ! does not work nicely with parallel unless a function is used
+# read_1_suffix="_R1_001.fastq.gz"
+# read_2_suffix="_R2_001.fastq.gz"
+# read_file_extension=".fastq.gz"
 
 # create output directories
 mkdir -p "${output_dir}/fastqc" \
     "${output_dir}/fastq-screen" \
     "${output_dir}/fastp" \
     "${output_dir}/multiqc"
+
+# check if fastq directory exist
+if [ ! -d "${fastq_dir}" ]; then
+    printf "\nFASTQ input directory (${fastq_dir}) does not exist.\n"
+    exit 1
+fi
+
+# check if reference fasta files exists
+for ref in ${ref_human} ${ref_plasmodium} ${ref_phix}; do
+    if ! [ -f "${ref}" ]; then
+        printf "\nReference fasta file not found (${ref}).\n"
+        exit 1
+    fi
+done
 
 # log run options
 printf "
@@ -110,7 +116,7 @@ for ref in ${ref_human} ${ref_plasmodium} ${ref_phix}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
         if ! [ -f "${i}" ]; then
             index_files_found=0
-            echo "Building BWA index for ${ref}..."
+            printf "\nBuilding BWA index for ${ref}...\n"
             bwa index "${ref}"
             break
         else
@@ -118,7 +124,7 @@ for ref in ${ref_human} ${ref_plasmodium} ${ref_phix}; do
         fi
     done
     if [ "$index_files_found" -eq 1 ]; then
-        echo "Found BWA index files for ${ref}, skipping indexing step..."
+        printf "\nFound BWA index files for ${ref}, skipping indexing step...\n"
     fi
 done
 
@@ -127,22 +133,30 @@ done
 # multiple files, i.e. we need to use a glob instead of a loop
 # (alternatively use parallel:
 # `find *.fq | parallel -j 10 "fastqc {} --outdir ...` or find exec )
-echo "Running FastQC prior to trimming..."
+printf "\nRunning FastQC prior to trimming...\n"
 fastqc \
     --threads "${n_threads}" \
     --outdir "${output_dir}/fastqc" \
     "${fastq_dir}/"*.fastq.gz
 
 # run fastq-screen (threads option inherited by bwa/bowtie)
-echo "Running FastQ Screen..."
-for read in "${fastq_dir}/"*.fastq.gz; do
-    fastq_screen \
-        --threads "${n_threads}" \
+printf "\nRunning FastQ Screen...\n"
+# for read in "${fastq_dir}/"*.fastq.gz; do
+#     fastq_screen \
+#         --threads "${n_threads}" \
+#         --aligner bwa \
+#         --conf "${fastq_screen_conf}" \
+#         --outdir "${output_dir}/fastq-screen" \
+#         "${read}"
+# done
+find "${fastq_dir}" -name *".fastq.gz" |
+    parallel -j $((${n_threads} / 8)) \
+        fastq_screen \
+        --threads 8 \
         --aligner bwa \
         --conf "${fastq_screen_conf}" \
         --outdir "${output_dir}/fastq-screen" \
-        "${read}"
-done
+        {}
 
 # trim reads using fastp (quality and adapters) using built-in multi-threading
 # fastp can use up to 16 threads, but efficiency is higher around 2-4 (https://hpc.nih.gov/training/gatk_tutorial/preproc.html#preproc-trim) => using gnu parallel would be more efficient for many samples
@@ -151,7 +165,7 @@ done
 # currently requires hard-coding the fastq read suffix
 # solution could be to loop through basenames and extend them as necessary, rather than relying on {} syntax
 # --out2 '{= s:.*/::; s:\.[^/.]+$::; s:\.[^/.]+$::; s/R1/R2/ =}'.trim.fastq.gz
-echo "Running fastp using parallel..."
+printf "\nRunning fastp using parallel...\n"
 find "${fastq_dir}" -name *"R1.fastq.gz" |
     parallel -j $((${n_threads} / 2)) --plus \
         fastp \
@@ -162,15 +176,24 @@ find "${fastq_dir}" -name *"R1.fastq.gz" |
         --json "${output_dir}/fastp/"'{= s:.*/::; s/_R1.fastq.gz/.trim.json/ =}' \
         --html "${output_dir}/fastp/"'{= s:.*/::; s/_R1.fastq.gz/.trim.html/ =}' \
         --detect_adapter_for_pe \
-        --cut_front \
-        --cut_tail \
-        --qualified_quality_phred 20 \
-        --length_required 15 \
-        --trim_poly_x \
+        --trim_poly_g \
         --thread 2
 
+# Additional options to consider:
+        # --adapter_sequence=AGATCGGAAGAGCACACGTCTGAACTCCAGTCA \
+        # --adapter_sequence_r2=AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT \
+# --adapter_fasta                  specify a FASTA file to trim both read1 and read2 (if PE) by all the sequences in this FASTA file (string [=])
+# --unpaired1                      for PE input, if read1 passed QC but read2 not, it will be written to unpaired1. Default is to discard it. (string [=])
+# --unpaired2                      for PE input, if read2 passed QC but read1 not, it will be written to unpaired2. If --unpaired2 is same as --unpaired1 (default mode), both unpaired reads will be written to this same file. (string [=])
+# --failed_out                     specify the file to store reads that cannot pass the filters. (string [=])
+# --trim_poly_x                    enable polyX trimming in 3' ends.
+# --merge                          for paired-end input, merge each pair of reads into a single read if they are overlapped. The merged reads will be written to the file given by --merged_out, the unmerged reads will be written to the files specified by --out1 and --out2. The merging mode is disabled by default.
+# --cut_front, --cut_tail, --cut_right => might interfere with deduplication
+# -q, --qualified_quality_phred      the quality value that a base is qualified. Default 15 means phred quality >=Q15 is qualified. (int [=15])
+# -l, --length_required              reads shorter than length_required will be discarded, default is 15. (int [=15])
+
 # re-run qc after trimming
-echo "Re-running FastQC after trimming..."
+printf "\nRe-running FastQC after trimming...\n"
 fastqc \
     --threads "${n_threads}" \
     --outdir "${output_dir}/fastqc/" \

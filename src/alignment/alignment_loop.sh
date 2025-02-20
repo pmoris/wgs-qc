@@ -28,14 +28,22 @@ trimmed_fastq_dir="${output_dir}/fastp/"
 bam_dir="${output_dir}/bwa/"
 mkdir -p "${bam_dir}"
 
+# config files
+multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
+
+# TODO: define fastq read suffix
+# read_1_suffix="_R1_001.fastq.gz"
+# read_2_suffix="_R2_001.fastq.gz"
+# read_file_extension=".fastq.gz"
+
 # check if fastq directory exist
 if [ ! -d "${trimmed_fastq_dir}" ]; then
-    echo "Trimmed FASTQ directory (${trimmed_fastq_dir}) does not exist."
+    printf "\nTrimmed FASTQ directory (${trimmed_fastq_dir}) does not exist.\n"
 fi
 
 # check if reference fasta file exists
 if ! [ -f "${ref}" ]; then
-    echo "Reference fasta file not found (${ref})."
+    printf "\nReference fasta file not found (${ref}).\n"
 fi
 
 # log run options
@@ -56,11 +64,17 @@ threads:                    ${n_threads}
 # create reference index if it does not yet exist
 for i in "${ref}."{amb,ann,bwt,pac,sa}; do
     if ! [ -f "${i}" ]; then
-        echo "Building BWA index for ${ref}..."
+        index_files_found=0
+        printf "\nBuilding BWA index for ${ref}...\n"
         bwa index "${ref}"
         break
+    else
+        index_files_found=1
     fi
 done
+if [ "$index_files_found" -eq 1 ]; then
+    printf "\nFound BWA index files for ${ref}, skipping indexing step...\n"
+fi
 
 # map fastq read pairs using bwa
 for r1 in "${trimmed_fastq_dir}"/*_R1_001.trim.fastq.gz; do

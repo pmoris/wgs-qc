@@ -22,8 +22,23 @@ echo "Project root = ${PROJECT_ROOT}"
 # set number of threads and memory for downstream tools
 n_threads="${SLURM_CPUS_PER_TASK:-8}"
 
-
 # define in and outputs
+output_dir="${PROJECT_ROOT}/results/"
+trimmed_fastq_dir="${output_dir}/fastp/"
+bam_dir="${output_dir}/bwa/"
+
+# create output directories
+mkdir -p "${bam_dir}"
+
+# read config files
+multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
+
+# TODO: define fastq read suffix
+# read_1_suffix="_R1_001.fastq.gz"
+# read_2_suffix="_R2_001.fastq.gz"
+# read_file_extension=".fastq.gz"
+
+# reference files
 ref_human="${PROJECT_ROOT}/data/ref/human/Homo_sapiens.GRCh38.p14.GENCODE.release45/GRCh38.primary_assembly.genome.fa.gz"
 ref_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.fasta"
 ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.fasta"
@@ -32,26 +47,16 @@ ref_poc="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_Povalec
 ref_pow="${PROJECT_ROOT}/data/ref/Povale/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
 ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
 
-output_dir="${PROJECT_ROOT}/results/"
-trimmed_fastq_dir="${output_dir}/fastp/"
-bam_dir="${output_dir}/bwa/"
-
-multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
-# reads_human="${PROJECT_ROOT}/data/fastq/human"
-
-# create output directories
-mkdir -p "${bam_dir}"
-
 # check if trimmed fastq files exist
 if [ ! -d "${trimmed_fastq_dir}" ]; then
-    echo "Trimmed FASTQ directory (${trimmed_fastq_dir}) does not exist."
+    printf "\nTrimmed FASTQ directory (${trimmed_fastq_dir}) does not exist.\n"
     exit 1
 fi
 
 # check if reference fasta files exists
 for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm}; do
     if ! [ -f "${ref}" ]; then
-        echo "Reference fasta file not found (${ref})."
+        printf "\nReference fasta file not found (${ref}).\n"
         exit 1
     fi
 done
@@ -81,7 +86,7 @@ for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
         if ! [ -f "${i}" ]; then
             index_files_found=0
-            echo "Building BWA index for ${ref}..."
+            printf "\nBuilding BWA index for ${ref}...\n"
             bwa index "${ref}"
             break
         else
@@ -89,7 +94,7 @@ for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
         fi
     done
     if [ "$index_files_found" -eq 1 ]; then
-        echo "Found BWA index files for ${ref}, skipping indexing step..."
+        printf "\nFound BWA index files for ${ref}, skipping indexing step...\n"
     fi
 done
 
@@ -110,8 +115,16 @@ for r1 in "${trimmed_fastq_dir}"/*_R1_001.trim.fastq.gz; do
     sample_flowcell="${sample_group##*_}"
     sample="${sample_name%%_*}"
 
-    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2}' "${PROJECT_ROOT}/data/samplesheet.csv")
+    # unset species to make sure there are no left overs from previous iterations
+    species=
+    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${PROJECT_ROOT}/data/samplesheet.csv")
+    if [ -z "${species:-}" ]; then
+        echo "Could not find sample during species lookup in samplesheet ${samplesheet}. Exiting..."
+        exit 1
+    fi
 
+    # unset ref to make sure there are no left overs from previous ref loop
+    ref=
     if [[ "${species}" == "pf" ]]; then
         ref="${ref_pf}"
     elif [[ "${species}" == "pv" ]]; then
@@ -123,10 +136,14 @@ for r1 in "${trimmed_fastq_dir}"/*_R1_001.trim.fastq.gz; do
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
     fi
+    if [ -z "${ref:-}" ]; then
+        echo "Could not find correct reference based on species lookup in samplesheet ${samplesheet}. Exiting..."
+        exit 1
+    fi
 
     # map to human reference genome first to remove host reads
     printf "\nMapping raw reads to human reference for sample %s, lane %s of sample group %s ...\n\n" "${sample_name}" "${sample_lane}" "${sample_group}"
-    printf "Creating human bam file: %s.sort.human.bam" "${bam_dir}/${sample_name}"
+    printf "Creating human bam file: %s.sort.human.bam\n" "${bam_dir}/${sample_name}"
     bwa mem \
         -t "${n_threads}" \
         -Y -K 100000000 \
@@ -142,7 +159,7 @@ for r1 in "${trimmed_fastq_dir}"/*_R1_001.trim.fastq.gz; do
     # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
     # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
     printf "\nMapping filtered reads to %s genome for sample %s, lane %s of sample group %s ...\n\n" "${species}" "${sample_name}" "${sample_lane}" "${sample_group}"
-    printf "Creating bam file: %s.sort.bam" "${bam_dir}/${sample_name}"
+    printf "\nCreating bam file: %s.sort.bam\n" "${bam_dir}/${sample_name}"
     samtools view -b -f 12 "${bam_dir}/${sample_name}.sort.human.bam" |
     # convert back to fastq
         samtools collate -Oun128 - |
