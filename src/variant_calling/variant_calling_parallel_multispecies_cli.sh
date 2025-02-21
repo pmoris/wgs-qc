@@ -4,7 +4,7 @@
 # Script to perform variant calling on bam files #
 ##################################################
 
-# set bash strict mode
+# set bash strict mode - optionally add x to show commands
 set -euo pipefail
 
 # allow debug mode by running `TRACE=1 ./script.sh`
@@ -40,6 +40,8 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -e | --read_file_extension .fastq.gz    Read file extension
     -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
                                             "name_first" or "flowcell_first".
+    -p | --single_species                   Species override for all samples. Options are:
+                                            pf, pv, pm poc, pow
 EOF
 }
 
@@ -141,6 +143,21 @@ while :; do
             die 'ERROR: "--fastq_identifier" requires a non-empty option argument.'
             ;;
 
+        -p|--single_species)       # Takes an option argument; ensure it has been specified.
+            if [ "$2" ]; then
+                single_species=$2
+                shift
+            else
+                die 'ERROR: "--single_species" requires a non-empty option argument.'
+            fi
+            ;;
+        --single_species=?*)
+            single_species=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --single_species=)         # Handle the case of an empty --output_dir=
+            die 'ERROR: "--single_species" requires a non-empty option argument.'
+            ;;
+
         --)              # End of all options.
             shift
             break
@@ -236,12 +253,13 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
 
     # create output directories
     mkdir -p "${vcf_dir}/${species}" \
-        "${vcf_dir}/${species}/haplotypecaller"\
+        "${vcf_dir}/${species}/haplotypecaller" \
         "${vcf_dir}/${species}/genomicsdbimport" \
         "${vcf_dir}/${species}/genotypegvcfs" \
         "${vcf_dir}/${species}/variantfilter/snp" \
         "${vcf_dir}/${species}/variantfilter/indel"
 
+    ref=
     if [[ "${species}" == "pf" ]]; then
         ref="${ref_pf}"
     elif [[ "${species}" == "pv" ]]; then
@@ -252,6 +270,12 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+        ref="${single_species}"
+    fi
+    if [ -z "${ref:-}" ]; then
+        printf "\Unexpected species name ${species} found in samplesheet ${samplesheet} (or passed via --single_species) for index and dictionary creation. Exiting...\n"
+        exit 1
     fi
 
     # Create reference fai and dict files if they do not yet exist
@@ -322,7 +346,7 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
     species=
     species=$(awk -v pat="${sample_id}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        echo "Could not find sample ${sample_id} during species lookup in samplesheet ${samplesheet}. Exiting..."
+        printf "\nCould not find sample ${bam} (search query = ${sample_id}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
         exit 1
     fi
 
@@ -338,18 +362,25 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+        ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        echo "Could not find correct reference based on species lookup in samplesheet ${samplesheet}. Exiting..."
+        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${sample_name}. Exiting...\n"
         exit 1
     fi
 
+    # set bed file with intervals/regions for reference species - expected file name is the same as the .fasta ref, but with a .bed extension
+    intervals=
     intervals="${ref%.fasta}.bed"
 
-    mkdir -p "${vcf_dir}/${species}/haplotypecaller"
+    # skip if g.vcf already exists
+    if [[ -f "${vcf_dir}/${species}/haplotypecaller/${sample_name}.{}.g.vcf.gz" ]]; then
+        printf "\GVCF files found for ${sample_name}, skipping...\n"
+        continue
+    fi
 
     # sample_name=$(basename ${bam} .sort.markdup.bam)
-
     printf "\nCalling haplotypes for ${species} sample ${sample_name} using reference ${ref} and intervals ${intervals}\n"
 
     # cut -f1 "${ref}.bed" | \
@@ -367,7 +398,10 @@ done
 # Combine gvfcs for each species, perform joint genotyping and filter variants
 for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
 
-     if [[ "${species}" == "pf" ]]; then
+    printf "\n----------------\nCombining GVCFS, performining joint genotyping and filtering variants for all ${species} samples.\n"
+
+    ref=
+    if [[ "${species}" == "pf" ]]; then
         ref="${ref_pf}"
     elif [[ "${species}" == "pv" ]]; then
         ref="${ref_pv}"
@@ -377,13 +411,21 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+        ref="${single_species}"
+    fi
+    if [ -z "${ref:-}" ]; then
+        printf "\Unexpected species name ${species} found in samplesheet ${samplesheet} (or wrong option passed for --single-species) for GenomicsDBImport. Exiting...\n"
+        exit 1
     fi
 
+    # set bed file with intervals/regions for reference species - expected file name is the same as the .fasta ref, but with a .bed extension
+    intervals=
     intervals="${ref%.fasta}.bed"
 
     # Create tmp and cache directories for genomicsdbimport
-    # Note: tmp should already exist, workspace cache cannot exist yet
-    mkdir -p "${vcf_dir}/${species}/genomicsdbimport/tmp" # "${vcf_dir}/workspace"
+    # Note: tmp should already exist, workspace cache cannot exist yet ("${vcf_dir}/workspace")
+    mkdir -p "${vcf_dir}/${species}/genomicsdbimport/tmp"
 
     # Create sample maps for genomicsdbimport
     cut -f1 "${intervals}" | \
@@ -501,6 +543,9 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
             -O "${vcf_dir}/${species}/variantfilter/combined.{}.filtered.vcf.gz"
 
     # combine regions for filtered and unfiltered vcf files
+
+    printf "\nCombining filtered per-region VCF files (snp and indels separately), parallellized across ${jobs} jobs and assigning each ${mem}G of memory...\n"
+
     declare -a input_vcf_array=()
     # NOTE: contigs/intervals must be supplied in the genomic order!
     # for i in "${vcf_dir}/variantfilter/combined."*".filtered.vcf.gz"; do

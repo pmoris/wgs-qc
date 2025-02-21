@@ -12,7 +12,7 @@
 # Script to perform quality control and trimming of fastq reads #
 #################################################################
 
-# set bash strict mode
+# set bash strict mode - optionally add x to show commands
 set -euo pipefail
 
 # allow debug mode by running `TRACE=1 ./qc.sh`
@@ -252,7 +252,7 @@ printf "\nRunning FastQ Screen...\n"
 #         --outdir "${output_dir}/fastq-screen" \
 #         "${read}"
 # done
-find "${fastq_dir}" -name *"${read_file_extension}" |
+find "${fastq_dir}" -name "*${read_file_extension}" |
     parallel -j $((${n_threads} / 8)) --halt now,fail=1 \
         fastq_screen \
         --threads 8 \
@@ -300,7 +300,7 @@ fastp_command() {
 export -f fastp_command
 
 printf "\nRunning fastp using parallel...\n"
-find "${fastq_dir}" -name *"${read_1_suffix}${read_file_extension}" |
+find "${fastq_dir}" -name "*${read_1_suffix}${read_file_extension}" |
     parallel -j $((${n_threads} / 2)) --halt now,fail=1 \
         fastp_command {}
 

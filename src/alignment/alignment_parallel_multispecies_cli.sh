@@ -4,9 +4,8 @@
 # Script to perform quality control and trimming of fastq reads #
 #################################################################
 
-# set bash strict mode
+# set bash strict mode - optionally add x to show commands
 set -euo pipefail
-# set -eo pipefail
 
 # allow debug mode by running `TRACE=1 ./script.sh` - equivalent to `set -x`
 if [[ "${TRACE-0}" == "1" ]]; then set -o xtrace; fi
@@ -31,7 +30,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
                 [-r1 READ 1 SUFFIX ] [-r2 READ 2 SUFFIX ] [-e READ FILE EXTENSION ]
                 [-n <name_first/flowcell_first ]
     -h                                      display this help and exit
-    -s | --samplesheet SAMPLESHEET.CSV     File path to samplesheet with sample-species info
+    -s | --samplesheet SAMPLESHEET.CSV      File path to samplesheet with sample-species info
     -o | --output_dir OUTPUT DIRECTORY      File path to output directory; should already
                                             contain trimmed reads directory named fastp
                                             (default = PROJECT_ROOT/results/)
@@ -40,6 +39,8 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -e | --read_file_extension .fastq.gz    Read file extension
     -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
                                             "name_first" or "flowcell_first".
+    -p | --single_species                   Species override for all samples. Options are:
+                                            pf, pv, pm poc, pow
 EOF
 }
 
@@ -139,6 +140,21 @@ while :; do
             ;;
         --fastq_identifier=)         # Handle the case of an empty --output_dir=
             die 'ERROR: "--fastq_identifier" requires a non-empty option argument.'
+            ;;
+
+        -p|--single_species)       # Takes an option argument; ensure it has been specified.
+            if [ "$2" ]; then
+                single_species=$2
+                shift
+            else
+                die 'ERROR: "--single_species" requires a non-empty option argument.'
+            fi
+            ;;
+        --single_species=?*)
+            single_species=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --single_species=)         # Handle the case of an empty --output_dir=
+            die 'ERROR: "--single_species" requires a non-empty option argument.'
             ;;
 
         --)              # End of all options.
@@ -278,12 +294,11 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         sample_lane="$(echo ${read_file_name} | grep -Po 'L\d{3}')"
         # sample_lane="${read_file_name##*_}"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
-        sample_library="${sample_name}"
 
+        sample_library="${sample_name}"
         # it is unclear whether or not the S### identifier refers to unique libraries or not
         # sample_group="${read_file_name%%_L*}"
         # sample_library="${sample_group##*_}"
-
 
     elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
 
@@ -304,7 +319,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     species=
     species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        echo "Could not find sample during species lookup in samplesheet ${samplesheet}. Exiting..."
+        printf "\nCould not find sample ${read_file_name} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
         exit 1
     fi
 
@@ -320,23 +335,31 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+        ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        echo "Could not find correct reference based on species lookup in samplesheet ${samplesheet}. Exiting..."
+        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_name}. Exiting...\n"
         exit 1
     fi
 
-    # map to human reference genome first to remove host reads
+    # skip if (filtered) bam file is already present
+    if [[ -f "${bam_dir}/${read_file_name}.sort.human.bam" && -f  "${bam_dir}/${read_file_name}.sort.bam" ]]; then
+        printf "\nBAM files found for ${read_file_name}, skipping...\n"
+        continue
+    fi
+
     printf "\nMapping raw reads to human reference for read file %s, flowcell %s, lane %s of sample %s, assigned to library / read group %s ...\n" "${read_file_name}" "${sample_flowcell}" "${sample_lane}" "${sample_name}" "${RG_LB}"
     printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_name}"
 
+    # map to human reference genome first to remove host reads
     bwa mem \
         -t "${n_threads}" \
         -Y -K 100000000 \
         -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}" \
         "${ref_human}" \
-        "${read_file_path}_R1_001.trim.fastq.gz" \
-        "${read_file_path}_R2_001.trim.fastq.gz" |
+        "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
+        "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
     # sort and compress to bam
         samtools sort --threads "${n_threads}" \
             -o "${bam_dir}/${read_file_name}.sort.human.bam"
@@ -346,6 +369,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
     printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_name}"
     printf "\nCreating bam file: %s.sort.bam\n" "${bam_dir}/${read_file_name}"
+
     samtools view -b -f 12 "${bam_dir}/${read_file_name}.sort.human.bam" |
     # convert back to fastq
         samtools collate -Oun128 - |
@@ -363,7 +387,8 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     # sort and compress to bam
         samtools sort --threads "${n_threads}" \
             -o "${bam_dir}/${read_file_name}.sort.bam"
-    printf "\n----------------\nFinished aligning reads in ${read_file_path} R1/R2."
+
+    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------\n"
 done
 
 # picard mark duplicates
@@ -412,11 +437,14 @@ printf "\nUsing %s GB of memory per job (n_jobs = %s)\n" "${mem}" "${jobs}"
 
 # alternatively, change initial loop to report including _ before L (and also L itself?) and then remove it again when creating outputs?
 
+# TODO: refactor into function to allow skipping, logging, etc.
+# NOTE: final _ needs to be present after id, to ensure names are not extended like S1 -> S11
+
+export bam_dir
 function add_input_prefix() {
     # echo ${1};
     declare -a arr=()
-    for i in "${1}_"*".sort.bam"; do
-        # echo "looping over ${i}"
+    for i in "${bam_dir}/"*"${1}_"*".sort.bam"; do
         arr+=( "--INPUT ${i}" )
     done;
     echo ${arr[@]}
@@ -440,8 +468,8 @@ done \
         gatk --java-options -Xmx${mem}G \
             MarkDuplicates \
             '$(add_input_prefix {})' \
-            --OUTPUT "{}.sort.markdup.bam" \
-            --METRICS_FILE {}.markdup.metrics \
+            --OUTPUT "${bam_dir}/{}.sort.markdup.bam" \
+            --METRICS_FILE "${bam_dir}/{}.markdup.metrics" \
             --REMOVE_DUPLICATES false
 
 # for bam in results-testset/bwa/*.sort.bam; do echo "${bam%%_L*}"; done | sort -u | while read -r line ; do array=(${line}*.sort.bam); echo ${array[@]}; done
