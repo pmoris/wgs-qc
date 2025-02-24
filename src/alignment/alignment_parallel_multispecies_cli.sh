@@ -461,7 +461,9 @@ elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
 fi
 
 for i in "${bam_dir}/"*.sort.bam; do
-    echo "$(basename "${i}" | cut -d '_' -f ${field} )";
+    sample_name=$(basename "${i}" | cut -d '_' -f ${field} )
+    if [[ -f "${bam_dir}/${sample_name}.sort.markdup.bam" ]]; then continue; fi
+    echo "${sample_name}";
 done \
     | sort -u \
     | parallel -j "${jobs}" --halt now,fail=1 \
@@ -480,6 +482,7 @@ done \
 
 # # TODO: incorporate into parallel?
 for bam in "${bam_dir}/"*.sort.markdup.bam; do
+    if [[ -f "${bam}" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
     samtools index --threads "${n_threads}" "${bam}"
     samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"
@@ -488,6 +491,7 @@ for bam in "${bam_dir}/"*.sort.markdup.bam; do
 done
 
 for bam in "${bam_dir}/"*.sort.human.bam; do
+    if [[ -f "${bam}" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
     samtools index --threads "${n_threads}" "${bam}"
     samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"

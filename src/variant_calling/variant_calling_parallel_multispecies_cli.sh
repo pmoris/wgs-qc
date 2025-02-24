@@ -419,6 +419,12 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         exit 1
     fi
 
+    # skip if combined.filtered.vcf already exists
+    if [[ -f "${vcf_dir}/${species}/combined.filtered.vcf.gz" ]]; then
+        printf "\Combined filtered VCF files found for ${species}, skipping...\n"
+        continue
+    fi
+
     # set bed file with intervals/regions for reference species - expected file name is the same as the .fasta ref, but with a .bed extension
     intervals=
     intervals="${ref%.fasta}.bed"
