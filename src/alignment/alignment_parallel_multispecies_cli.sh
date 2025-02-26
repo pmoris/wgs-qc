@@ -480,9 +480,12 @@ done \
 
 # └─▶ for i in results-testset/bwa/*.sort.bam; do echo "${i%%_L*}"; done | sort -u | parallel echo "{}*.sort.bam" "{}"
 
+printf "\nCollecting alignment stats on .sort.markdup.bam files...\n"
+
+
 # # TODO: incorporate into parallel?
 for bam in "${bam_dir}/"*.sort.markdup.bam; do
-    if [[ -f "${bam}" ]]; then continue; fi
+    if [[ -f "${bam}.bai" && -f "${bam}.stats" && -f "${bam}.flagstat" && -f "${bam}.idxstats" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
     samtools index --threads "${n_threads}" "${bam}"
     samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"
@@ -491,7 +494,7 @@ for bam in "${bam_dir}/"*.sort.markdup.bam; do
 done
 
 for bam in "${bam_dir}/"*.sort.human.bam; do
-    if [[ -f "${bam}" ]]; then continue; fi
+    if [[ -f "${bam}.bai" && -f "${bam}.stats" && -f "${bam}.flagstat" && -f "${bam}.idxstats" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
     samtools index --threads "${n_threads}" "${bam}"
     samtools stats --threads "${n_threads}" "${bam}" >"${bam}.stats"

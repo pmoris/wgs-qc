@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# TODO: set GATK -verbosity to WARNING or ERROR instead of default INFO
+# TODO: automatically clean up genomicsDB workspace and tmp after processing each species or interval (latter option would require parallel to call custom function with separate GATK and removal steps)
+
 ##################################################
 # Script to perform variant calling on bam files #
 ##################################################
@@ -468,6 +471,9 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         -R "${ref}" \
         -V "gendb://${vcf_dir}/${species}/genomicsdbimport/workspace-{}" \
         -O "${vcf_dir}/${species}/genotypegvcfs/combined.{}.vcf.gz"
+
+    # rm -r "${vcf_dir}/${species}/genomicsdbimport/workspace-"*
+    # find results/ -name "workspace-*" -delete
 
     # filter variants - process snp and indels separately
     # See: https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants

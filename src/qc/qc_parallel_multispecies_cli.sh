@@ -7,6 +7,7 @@
 # TODO: split different tasks over different loops
 # TODO: provide references as list that can be re-used by log run options and loops?
 # TODO: clean up read file extension clean up somehow
+# TODO: add skip option for fastqc -> difficult because it is a single command for all inputs
 
 #################################################################
 # Script to perform quality control and trimming of fastq reads #
@@ -285,6 +286,11 @@ fastp_command() {
     out2="${output_dir}/fastp/${sample_name}${read_2_suffix}.trim.fastq.gz"
     json="${output_dir}/fastp/${sample_name}.trim.json"
     html="${output_dir}/fastp/${sample_name}.trim.html"
+
+    if [[ -f "${output_dir}/fastp/${sample_name}${read_1_suffix}.trim.fastq.gz" && -f  "${output_dir}/fastp/${sample_name}${read_2_suffix}.trim.fastq.gz" && -f "${output_dir}/fastp/${sample_name}.trim.json" && -f "${output_dir}/fastp/${sample_name}.trim.html" ]]; then
+        printf "\nFiltered fastp files found for ${sample_name}, skipping...\n"
+        return 0
+    fi
 
     fastp \
         --in1 "${in1}" \
