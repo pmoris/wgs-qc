@@ -34,73 +34,28 @@ PROJECT_ROOT=$(realpath "${SCRIPT_DIR}/../")
 echo "Project root = ${PROJECT_ROOT}"
 
 # qc
-bash "${PROJECT_ROOT}/scripts/qc.sh" \
+bash "${PROJECT_ROOT}/scripts/qc_parallel_multispecies_cli.sh" \
     --input_dir "${PROJECT_ROOT}/data/fastq/test" \
     --output_dir "${PROJECT_ROOT}/results/test" \
     -r1 "_R1_001" -r2 "_R2_001" -e ".fastq.gz"
 
-# bash "${PROJECT_ROOT}/scripts/qc.sh" \
-#     --input_dir "${PROJECT_ROOT}/data/fastq/batch_001" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_001" \
-#     -r1 "_R1_001" -r2 "_R2_001" -e ".fastq.gz"
-
-# bash "${PROJECT_ROOT}/scripts/qc.sh" \
-#     --input_dir "${PROJECT_ROOT}/data/fastq/batch_002" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_002" \
-#     -r1 "_R1" -r2 "_R2" -e ".fastq.gz"
-
-# bash "${PROJECT_ROOT}/scripts/qc.sh" \
-#     --input_dir "${PROJECT_ROOT}/data/fastq/batch_003" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_003" \
-#     -r1 "_R1" -r2 "_R2" -e ".fastq.gz"
-
 # alignment
-bash "${PROJECT_ROOT}/scripts/alignment.sh" \
+bash "${PROJECT_ROOT}/scripts/alignment_parallel_multispecies_cli.sh" \
     --samplesheet "${PROJECT_ROOT}/data/fastq/test/samplesheet.csv" \
     --output_dir "${PROJECT_ROOT}/results/test" \
     -r1 "_R1_001" -r2 "_R2_001" -e ".fastq.gz" \
     --fastq_identifier name_first
 
-# bash "${PROJECT_ROOT}/scripts/alignment.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_001/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_001" \
-#     -r1 "_R1_001" -r2 "_R2_001" -e ".fastq.gz" \
-#     --fastq_identifier name_first
-
-# bash "${PROJECT_ROOT}/scripts/alignment.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_002/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_002" \
-#     -r1 "_R1" -r2 "_R2" -e ".fastq.gz" \
-#     --fastq_identifier flowcell_first
-
-# bash "${PROJECT_ROOT}/scripts/alignment.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_003/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_003" \
-#     -r1 "_R1" -r2 "_R2" -e ".fastq.gz" \
-#     --fastq_identifier flowcell_first
 
 # variant calling
-bash "${PROJECT_ROOT}/scripts/variant-calling.sh" \
+bash "${PROJECT_ROOT}/scripts/variant_calling_parallel_multispecies_cli.sh" \
     --samplesheet "${PROJECT_ROOT}/data/fastq/test/samplesheet.csv" \
     --output_dir "${PROJECT_ROOT}/results/test" \
     --fastq_identifier name_first
 
-# bash "${PROJECT_ROOT}/scripts/variant-calling.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_001/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_001" \
-#     --fastq_identifier name_first
-
-# bash "${PROJECT_ROOT}/scripts/variant-calling.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_002/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_002" \
-#     --fastq_identifier flowcell_first
-
-
-# bash "${PROJECT_ROOT}/scripts/variant-calling.sh" \
-#     --samplesheet "${PROJECT_ROOT}/data/fastq/batch_003/samplesheet.csv" \
-#     --output_dir "${PROJECT_ROOT}/results/batch_003" \
-#     --fastq_identifier flowcell_first
-
-# bash "${PROJECT_ROOT}/scripts/annotation.sh"
+# annotation
+bash "${PROJECT_ROOT}/scripts/annotation_multispecies_cli.sh" \
+   --samplesheet "${PROJECT_ROOT}/data/fastq/test/samplesheet.csv" \
+   --output_dir "${PROJECT_ROOT}/results/test"
 
 printf "Script finished at $(date).\n"
