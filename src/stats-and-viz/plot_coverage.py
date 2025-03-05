@@ -1,20 +1,28 @@
-import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
-
 # import numpy as np
 import argparse
 import subprocess
 from pathlib import Path
-import warnings
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
 
 matplotlib.use("Agg")  # Non-GUI backend (for saving images)
 
+# TODO: save intermediate depth files
+# TODO: allow script to run from a set of depth files, use --bam or --deph flag to indicate which type is provided.
+# TODO: allow script to take a specific glob to search for input files in a directory, default to bam otherwise
+# TODO: in batch mode, skip files in directory if output file already exists (also for stand-alone?), unless --overwrite flag is provided
 # TODO: depth < 1 needs to be set to 0 or 1 to avoid issues in log scale OR set max y-axis value in absolute values
+# TODO: log scale should still show linear scale tick labels
 # TODO: set limit to regions for species with too many regions, or concat all non-chromosome regions
+# TODO:
+
+
 # TODO: allow script to take in a samplesheet with filepaths as input (or with sample names to search for?)
 
 
+# TODO: add check for overwriting file if it exists
 def run_samtools_depth(bam_file, depth_file):
     """Runs `samtools depth` and saves output to a file."""
     print(f"Generating depth file for {bam_file} -> {depth_file}")
@@ -55,30 +63,161 @@ def plot_depth(df, output_file, width, **kwargs):
         df["bin"] = (df["pos"] // bin_size) * bin_size
         binned_df = df.groupby(["bin", "chrom"], as_index=False)["depth"].mean()
 
-        unique_chroms = binned_df["chrom"].unique()
-
         if kwargs.get("log_scale"):
             binned_df["depth"] = binned_df["depth"] + 1
 
-        fig, axes = plt.subplots(
-            len(unique_chroms), 1, figsize=(width, 3 * len(unique_chroms)), sharex=False
-        )
+        unique_chroms = binned_df["chrom"].unique()
 
-        if len(unique_chroms) == 1:
-            axes = [axes]
+        max_facets = 20
+        if len(unique_chroms) < max_facets:
+            fig, axes = plt.subplots(
+                len(unique_chroms),
+                1,
+                figsize=(width, 3 * len(unique_chroms)),  # Adjust height dynamically
+                sharex=False,
+            )
+            plt.subplots_adjust(hspace=0.4)  # Increase spacing between plots
 
-        for ax, (chrom, chrom_df) in zip(axes, binned_df.groupby("chrom")):
-            ax.plot(chrom_df["bin"], chrom_df["depth"], color="blue", linewidth=0.7)
-            ax.set_xlim(
-                [0, chrom_df["bin"].max()]
-            )  # Set X-axis to range from 0 to max position for this chromosome
-            ax.set_title(f"Coverage for {chrom}")
-            ax.set_ylabel("Depth")
-            ax.grid(True, linestyle="--", alpha=0.5)
+            if len(unique_chroms) == 1:
+                axes = [axes]
 
-            if kwargs.get("log_scale"):
-                ax.set_yscale("log")
-                ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+            for ax, (chrom, chrom_df) in zip(axes, binned_df.groupby("chrom")):
+                ax.plot(chrom_df["bin"], chrom_df["depth"], color="blue", linewidth=0.7)
+                ax.set_xlim(
+                    [0, chrom_df["bin"].max()]
+                )  # Set X-axis to range from 0 to max position for this chromosome
+                ax.set_title(f"Coverage for {chrom}")
+                ax.set_ylabel("Depth")
+                ax.grid(True, linestyle="--", alpha=0.5)
+
+                if kwargs.get("log_scale"):
+                    ax.set_yscale("log")
+                    ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+
+        else:
+            print(
+                f"Too many regions to print facetted plot, bundling all regions after the first {max_facets} longest regions (should usually be chromosomes)."  # most highly covered regions (should usually be chromosomes)."
+            )
+
+            chrom_coverage = (
+                df.groupby("chrom")["pos"]
+                .max()
+                .sort_values(ascending=False)
+                .index.to_list()
+            )
+            # chrom_coverage = (
+            #     binned_df.groupby("chrom")["depth"]
+            #     .mean()
+            #     .sort_values(ascending=False)
+            #     .index.to_list()
+            # )
+            primary_chroms = chrom_coverage[:max_facets]
+            remaining_chroms = chrom_coverage[max_facets:]
+
+            # import ipdb
+
+            # ipdb.set_trace()
+
+            fig, axes = plt.subplots(
+                len(primary_chroms) + (1 if remaining_chroms else 0),
+                1,
+                figsize=(
+                    kwargs.get("width", 15),
+                    3 * (len(primary_chroms) + (1 if remaining_chroms else 0)),
+                ),
+                sharex=False,
+            )
+            plt.subplots_adjust(hspace=0.4)  # Increase spacing between plots
+
+            for ax, chrom in zip(axes, primary_chroms):
+                chrom_df = binned_df[binned_df["chrom"] == chrom]
+                ax.plot(chrom_df["bin"], chrom_df["depth"], color="blue", linewidth=0.7)
+                ax.set_xlim([0, chrom_df["bin"].max()])
+                ax.set_title(f"Coverage for {chrom}")
+                ax.set_ylabel("Depth")
+                ax.grid(True, linestyle="--", alpha=0.5)
+
+                if kwargs.get("log_scale"):
+                    ax.set_yscale("log")
+                    ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+
+            if remaining_chroms:
+                # remaining_df = binned_df[binned_df["chrom"].isin(remaining_chroms)]
+                # axes[-1].plot(
+                #     remaining_df["bin"],
+                #     remaining_df["depth"],
+                #     color="blue",
+                #     linewidth=0.7,
+                # )
+                # axes[-1].set_title("Coverage for remaining regions")
+                # axes[-1].set_ylabel("Depth")
+                # axes[-1].grid(True, linestyle="--", alpha=0.5)
+
+                # if kwargs.get("log_scale"):
+                #     axes[-1].set_yscale("log")
+                #     axes[-1].yaxis.set_major_formatter(
+                #         matplotlib.ticker.ScalarFormatter()
+                #     )
+
+                remaining_df = binned_df[
+                    binned_df["chrom"].isin(remaining_chroms)
+                ].copy()
+
+                # Convert to global positions
+                remaining_df["global_bin"] = remaining_df["bin"] + remaining_df[
+                    "chrom"
+                ].map(cumulative_pos)
+
+                # axes[-1].plot(
+                #     remaining_df["global_bin"],
+                #     remaining_df["depth"],
+                #     color="blue",
+                #     linewidth=0.7,
+                # )
+
+                # Average depth for the same global_bin (to avoid multiple lines)
+                merged_df = remaining_df.groupby("global_bin", as_index=False)[
+                    "depth"
+                ].mean()
+
+                axes[-1].plot(
+                    merged_df["global_bin"],  # Use global_bin
+                    merged_df["depth"],
+                    color="blue",
+                    linewidth=0.7,
+                )
+
+                axes[-1].set_title("Coverage for remaining regions")
+                axes[-1].set_ylabel("Depth")
+                axes[-1].grid(True, linestyle="--", alpha=0.5)
+
+                if kwargs.get("log_scale"):
+                    axes[-1].set_yscale("log")
+                    axes[-1].yaxis.set_major_formatter(
+                        matplotlib.ticker.ScalarFormatter()
+                    )
+
+                # Add chromosome tick labels & alternating shading
+                chrom_midpoints, prev_end = {}, 0
+                for i, (chrom, start) in enumerate(cumulative_pos.items()):
+                    if (
+                        chrom in remaining_chroms
+                    ):  # ✅ Only include unplotted chromosomes
+                        chrom_mid = start + (chrom_lengths[chrom] // 2)
+                        chrom_midpoints[chrom] = chrom_mid
+                        axes[-1].axvspan(
+                            prev_end,
+                            start + chrom_lengths[chrom],
+                            color="gray",
+                            alpha=0.2 if i % 2 == 0 else 0,
+                        )
+                        prev_end = start + chrom_lengths[chrom]
+
+                axes[-1].set_xticks(list(chrom_midpoints.values()))
+                axes[-1].set_xticklabels(
+                    list(chrom_midpoints.keys()), rotation=45, ha="right"
+                )
+                axes[-1].set_xlabel("Chromosome")
 
         plt.xlabel("Genomic Position")
 
@@ -436,7 +575,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# TODO: switch back to function taking both bam and depth file (default None) and then choosing logic to follow based on which one is provided
-# for batch mode, two different function calls will be necessary
