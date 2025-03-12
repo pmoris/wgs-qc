@@ -186,7 +186,7 @@ def snpeff_annotation_2_dict(annotation_list, marker):
         # TODO: check if multiple annotations with the same alt ANN_Allele can occur. If so, needs to be taken into account so that they do not overwrite each other.
         # ! TODO: write test input file to check different conditions like this
 
-        return mutation_allele_dict
+    return mutation_allele_dict
 
 
 def collect_annotated_samples(mutation_allele_dict, samples, alt):
