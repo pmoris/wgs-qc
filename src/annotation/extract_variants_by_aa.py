@@ -261,7 +261,7 @@ def collect_annotated_samples(
                     if alt_number != allele:
                         # TODO: remove warning: this will happen every time there is a heterozygote with multiple alleles causing the same mutation, because we are checking each allele and annotation one by one, e.g. for 1/2, 1 will never match the annotation for 2 and vice versa.
                         warnings.warn(
-                            f"Allele {allele} in genotype {genotype} could not be found in annotation {ann_allele}-{alt_number} ( {mutation_allele_dict}. Expected {alt_number} )."
+                            f"Allele {allele} in genotype {genotype} could not be found in annotation {ann_allele}-{alt_number}. This can happen when a sample contains two different allleles that were both annotated with the same mutation (i.e., both alternative codons cause the same mutation).\nMarker of interest: {marker_of_interest}\nSnpEff annotations: {mutation_allele_dict}\n"
                         )
                         continue
 
