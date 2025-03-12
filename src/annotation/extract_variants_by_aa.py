@@ -180,7 +180,7 @@ def snpeff_annotation_2_dict(annotation_list, marker):
         # check if there are multiple alleles leading to the same marker mutation, since these are noteworthy
         if len(mutation_allele_dict[mutation].keys()) > 1:
             print(
-                f"Found multiple annotations for the same mutation! "
+                f"Found multiple annotations for the same mutation! {marker}"
             )  # {mutation_allele_dict[mutation]}
 
         # TODO: check if multiple annotations with the same alt ANN_Allele can occur. If so, needs to be taken into account so that they do not overwrite each other.
@@ -189,10 +189,14 @@ def snpeff_annotation_2_dict(annotation_list, marker):
     return mutation_allele_dict
 
 
-def collect_annotated_samples(mutation_allele_dict, samples, alt):
+def collect_annotated_samples(
+    mutation_allele_dict, samples, alt, marker_of_interest, detected_markers_per_sample
+):
     """Find all samples that contain any of the various annotations for a specific mutation
     and return them as a list of dictionaries (plus update global dictionary for
     simplified form for printing).
+    For a sample with a genotype where both alleles can cause the same mutation, both will
+    be added as individual dictionaries (= rows in eventual dataframe).
 
     Args:
         mutation_allele_dict (_type_): A dictionary containing mutations (as keys, should always
@@ -239,31 +243,26 @@ def collect_annotated_samples(mutation_allele_dict, samples, alt):
                 allele = int(allele)
             except ValueError:
                 warnings.warn(
-                    f"Allele {allele} in genotype {genotype} could not be assigned to marker."
+                    f"Allele {allele} in genotype {genotype} could not be assigned to marker. Expected an integer to represent the position of the allele in the VCF ALT field."
                 )
                 continue
 
             # iterate over the different annotated alleles that cause the current mutation
+            # {'G437A': {'C': None, 'T': None}}
+            # should only ever contain a single mutation with 1 or more ANN_Alleles
             for mutation, ann_allele_dict in mutation_allele_dict.items():
 
-                # check which ALT allele is present in the sample
+                # check which of the ALT alleles is present in the current sample
                 for ann_allele, alt_number in ann_allele_dict.items():
-
-                    #!                          print("checking allele", allele)
-                    #!                          print(mutation, ann_allele)
-                    #!                          print(alleles)
-                    #!                          print(genotype)
-                    #!                          print(alt_number)
-                    #!                          print(line)
-                    #!                          print("marker", marker)
-                    #!                          print("dict", mutation, ann_allele_dict)
-
-                    # skip if alt does not match allele as labeled in genotype (e.g., 0/1, where 1 = alt_number taken from the position of the ANN_Allele, matching the current annotation/mutation combination, in the ALT column
+                    # skip if alt does not match allele as labeled in genotype
+                    # e.g., 0/1, where 1 = alt_number taken from the position of the ANN_Allele,
+                    # matching the current annotation/mutation combination,
+                    # in the ALT column
                     if alt_number != allele:
+                        # TODO: remove warning: this will happen every time there is a heterozygote with multiple alleles causing the same mutation, because we are checking each allele and annotation one by one, e.g. for 1/2, 1 will never match the annotation for 2 and vice versa.
                         warnings.warn(
-                            f"Allele {allele} in genotype {genotype} could not found in annotations."
+                            f"Allele {allele} in genotype {genotype} could not be found in annotation {ann_allele}-{alt_number} ( {mutation_allele_dict}. Expected {alt_number} )."
                         )
-                        exit(1)
                         continue
 
                     detected_marker = {
@@ -272,13 +271,11 @@ def collect_annotated_samples(mutation_allele_dict, samples, alt):
                         "marker_ALT": ann_allele,
                         "genotype": genotype,
                         "alt_number": alt_number,
-                        "gene_name": gene_name,
-                        "gene_id": gene_id,
+                        "gene_name": marker_of_interest["gene_name"],
+                        "gene_id": marker_of_interest["gene_id"],
                     }
-                    # TODO: check if position is correct
-                    # assert ANN_Allele in alt  # TODO => no longer works due to refactoring, but ANN_Allele was set in a loop, so success was a fluke?
-                    # ! alt is a global variable?
-                    assert alt.index(ann_allele) + 1 == alt_number
+                    assert ann_allele in alt
+                    assert alt.split(",").index(ann_allele) + 1 == alt_number
 
                     detected_markers_list.append(detected_marker)
 
@@ -286,7 +283,7 @@ def collect_annotated_samples(mutation_allele_dict, samples, alt):
                     if sample_name not in detected_markers_per_sample:
                         detected_markers_per_sample[sample_name] = []
                     detected_markers_per_sample[sample_name].append(
-                        f"{mutation} ({gene_name})"
+                        f"{mutation} ({marker_of_interest["gene_name"]})"
                     )
 
     #!                            print(detected_markers)
@@ -294,7 +291,9 @@ def collect_annotated_samples(mutation_allele_dict, samples, alt):
     return detected_markers_list
 
 
-def detect_markers_in_bcf_query(bcf_query_result, marker):
+def detect_markers_in_bcf_query(
+    bcf_query_result, marker_of_interest, detected_markers_per_sample
+):
     """Search for given marker in bcftools query output and return a list
     of dictionaries, each containing a single sample that has one of the
     various genotypes/annotations that correspond to the marker mutation,
@@ -314,7 +313,7 @@ def detect_markers_in_bcf_query(bcf_query_result, marker):
     """
 
     # loop through lines of bcf query
-    for line in bcf_query_result.stdout.strip().split("\n"):
+    for line in bcf_query_result.strip().split("\n"):
         fields = line.split("\t")
 
         # check if vcf output format matches expectations
@@ -330,7 +329,11 @@ def detect_markers_in_bcf_query(bcf_query_result, marker):
 
         # search for marker in snpeff annotations
         # multiple annotations can have the same mutation, so store them in a dictionary
-        mutation_allele_dict = snpeff_annotation_2_dict(annotation_list, marker)
+        # {'G437A': {'C': None, 'T': None}}
+        # should only ever contain a single mutation with 1 or more ANN_Alleles
+        mutation_allele_dict = snpeff_annotation_2_dict(
+            annotation_list, marker_of_interest["marker"]
+        )
 
         # skip to next row if marker in variants of interest list could not be found in
         # annotations of current row of bcftools query output
@@ -360,7 +363,7 @@ def detect_markers_in_bcf_query(bcf_query_result, marker):
             #     )
 
         print(
-            f"Found annotation for {marker} in VCF file - querried on gene_id {gene_id} - current position = {pos}..."
+            f"Found annotation for {marker_of_interest["marker"]} in VCF file - querried on gene_id {marker_of_interest["gene_id"]} - current position = {pos}...\nLooking for matching genotype in samples..."
         )
 
         if len(mutation_allele_dict.keys()) > 1:
@@ -369,7 +372,13 @@ def detect_markers_in_bcf_query(bcf_query_result, marker):
             )
 
         # store samples that match the found marker annotation
-        detected_markers = collect_annotated_samples(mutation_allele_dict, samples, alt)
+        detected_markers = collect_annotated_samples(
+            mutation_allele_dict,
+            samples,
+            alt,
+            marker_of_interest,
+            detected_markers_per_sample,
+        )
 
         return detected_markers
 
@@ -432,7 +441,9 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Input GFF file could not found: {gff_file}")
     output_file = Path(args.output) if args.output else None
     if output_file and output_file.exists() and not args.overwrite:
-        print(f"Output file already exists. Use --overwrite to force re-generation.")
+        warnings.warn(
+            f"Output file already exists. Use --overwrite to force re-generation."
+        )
         exit(1)
 
     # parse gff
@@ -449,20 +460,28 @@ if __name__ == "__main__":
     # iterate over each marker in marker list and search for its presence in the VCF file
     for _, marker_row in markers.iterrows():
 
-        gene_id, gene_name, marker, drug = (
-            marker_row["gene_id"],
-            marker_row["gene_name"],
-            marker_row["mutation"],
-            marker_row["drug"],
-            # marker_row["info"],
-            # TODO: add additional info depending on what is present in variants of interest file
-        )
+        # gene_id, gene_name, marker, drug = (
+        #     marker_row["gene_id"],
+        #     marker_row["gene_name"],
+        #     marker_row["mutation"],
+        #     marker_row["drug"],
+        #     # marker_row["info"],
+        #     # TODO: add additional info depending on what is present in variants of interest file
+        # )
+        marker_of_interest = {
+            "gene_id": marker_row["gene_id"],
+            "gene_name": marker_row["gene_name"],
+            "marker": marker_row["mutation"],
+            "drug": marker_row["drug"],
+        }
 
         # find marker gene start and end coordinates
-        chrom, start, end = gff_annotations[gene_id]
+        chrom, start, end = gff_annotations[marker_of_interest["gene_id"]]
 
         # extract vcf entries
-        print(f"Querying VCF file for marker mutation {marker}...")
+        print(
+            f"Querying VCF file for marker mutation {marker_of_interest["marker"]}..."
+        )
         result = query_vcf(vcf_file, chrom, start, end)
 
         # skip empty output lines
@@ -473,16 +492,17 @@ if __name__ == "__main__":
             continue
 
         # detect markers in bcf query output
-        marker_results = detect_markers_in_bcf_query(result, marker)
+        marker_results = detect_markers_in_bcf_query(
+            result.stdout, marker_of_interest, detected_markers_per_sample
+        )
         if marker_results:
             # add additional column info back
             for result in marker_results:
-                result["drug"] = drug
+                result["drug"] = marker_of_interest["drug"]
             # store in output list for conversion to dataframe
             detected_markers.extend(marker_results)
 
     # Convert results to DataFrame and save to CSV
-    print(detected_markers)
     df_output = pd.DataFrame(detected_markers)
     df_output.to_csv(output_file, index=False) if output_file else None
 
