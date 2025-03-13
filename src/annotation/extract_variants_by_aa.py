@@ -190,7 +190,13 @@ def snpeff_annotation_2_dict(annotation_list, marker):
 
 
 def collect_annotated_samples(
-    mutation_allele_dict, samples, alt, marker_of_interest, detected_markers_per_sample
+    mutation_allele_dict,
+    samples,
+    alt,
+    marker_of_interest,
+    detected_markers_per_sample,
+    chrom,
+    pos,
 ):
     """Find all samples that contain any of the various annotations for a specific mutation
     and return them as a list of dictionaries (plus update global dictionary for
@@ -273,6 +279,8 @@ def collect_annotated_samples(
                         "alt_number": alt_number,
                         "gene_name": marker_of_interest["gene_name"],
                         "gene_id": marker_of_interest["gene_id"],
+                        "chrom": chrom,
+                        "position": pos,
                     }
                     assert ann_allele in alt
                     assert alt.split(",").index(ann_allele) + 1 == alt_number
@@ -378,6 +386,8 @@ def detect_markers_in_bcf_query(
             alt,
             marker_of_interest,
             detected_markers_per_sample,
+            chrom,
+            pos,
         )
 
         return detected_markers
