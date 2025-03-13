@@ -113,7 +113,7 @@ n_threads="${SLURM_CPUS_PER_TASK:-8}"
 if [ -n "${SLURM_MEM_PER_NODE-}" ]; then
     mem=$((${SLURM_MEM_PER_NODE}/1000}))
 elif [ -n "${SLURM_MEM_PER_CPU-}" ]; then
-    mem=$((${SLURM_MEM_PER_CPU}*${n_threads}))
+    mem=$((${SLURM_MEM_PER_CPU}/1000*${n_threads}))
 else
     mem=8
 fi
