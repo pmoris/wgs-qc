@@ -42,7 +42,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
     -e | --read_file_extension .fastq.gz    Read file extension
     -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
-                                            "name_first" or "flowcell_first".
+                                            "name_first", "flowcell_first" or "novogene".
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
 EOF
@@ -189,8 +189,8 @@ vcf_dir="${output_dir}/gatk/"
 
 # set fastq identifier structure
 fastq_identifier=${fastq_identifier:-}
-if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" ]]; then
-    printf "\nFastq identifier structure was not set correctly, please specify "name_first" or "flowcell_first" \n"
+if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" ]]; then
+    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first" or "novogene".\n"
     exit 1
 fi
 
@@ -337,15 +337,19 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
     # retrieve lane and sample group
 
     # get sample id for lookup in samplesheet
+    # note that filename is now different from the fastq and pre-markduplicate .sort.bam (lanes/libraries are merged now), so this parsing step should not required anymore technically
     if [[ "${fastq_identifier}" == "name_first" ]]; then
-        # ANT5797_S262_L001_R1_001.fastq
-        sample_id="$(echo ${sample_name} | cut -d '_' -f1)"
+        # 23060404.sort.markdup.bam
+        sample_id="$(echo "${sample_name}" | cut -d '_' -f1)"
     elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
-        # 22NY35LT3_106264-002-098_CCTCCTTT-CTTTCGCG_L007_R2.fastq.gz
-        sample_id="$(echo ${sample_name} | cut -d '_' -f2)"
+        # 106264-001-116.sort.markdup.bam
+        sample_id="$(echo "${sample_name}" | cut -d '_' -f2)"
+    elif [[ "${fastq_identifier}" == "novogene" ]]; then
+        # ANT_5975_WB.sort.markdup.bam
+        sample_id="${sample_name}"
     fi
 
-    # unset species to make sure there are no left overs from previous iterations
+    # unset species to make sure there are no leftovers from previous iterations
     species=
     species=$(awk -v pat="${sample_id}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then

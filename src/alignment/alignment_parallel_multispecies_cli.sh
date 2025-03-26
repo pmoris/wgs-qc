@@ -38,7 +38,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
     -e | --read_file_extension .fastq.gz    Read file extension
     -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
-                                            "name_first" or "flowcell_first".
+                                            "name_first", "flowcell_first" or "novogene".
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
 EOF
@@ -192,8 +192,8 @@ read_file_extension=${read_file_extension:-".fastq.gz"}     # extension of trimm
 
 # set fastq identifier structure
 fastq_identifier=${fastq_identifier:-}
-if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" ]]; then
-    printf "\nFastq identifier structure was not set correctly, please specify "name_first" or "flowcell_first" \n"
+if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" ]]; then
+    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first" or "novogene".\n"
     exit 1
 fi
 
@@ -276,39 +276,70 @@ done
 # map fastq read pairs using bwa
 for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
 
-    # get filepath containing basename of each read pair
+    # get filepath containing basename of each read pair without R1/R2 suffix or file extension
     read_file_path="${r1%${read_1_suffix}.trim.fastq.gz}"
-    # read_file_name=$(basename "${read_1}" "_R1_001.trim.fastq.gz")
+    # read_file_basename=$(basename "${read_1}" "_R1_001.trim.fastq.gz")
 
-    # convert to basename of each read without the filepath prefix
-    read_file_name="${read_file_path##*/}"
+    # remove filepath prefix
+    read_file_basename="${read_file_path##*/}"
 
     # TODO: modify this to read from samplesheet.csv instead
     # retrieve lane and sample group
 
     if [[ "${fastq_identifier}" == "name_first" ]]; then
-
         # ANT5797_S262_L001_R1_001.fastq
-        sample_name="$(echo ${read_file_name} | cut -d '_' -f1)"
-        # sample="${read_file_name%%_*}"
-        sample_lane="$(echo ${read_file_name} | grep -Po 'L\d{3}')"
-        # sample_lane="${read_file_name##*_}"
+
+        sample_name="$(echo "${read_file_basename}" | cut -d '_' -f1)"
+        # sample="${read_file_basename%%_*}"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}')"
+        # sample_lane="${read_file_basename##*_}"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
 
         sample_library="${sample_name}"
         # it is unclear whether or not the S### identifier refers to unique libraries or not
-        # sample_group="${read_file_name%%_L*}"
+        # sample_group="${read_file_basename%%_L*}"
         # sample_library="${sample_group##*_}"
 
     elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
-
         # 22NY35LT3_106264-002-098_CCTCCTTT-CTTTCGCG_L007_R2.fastq.gz
-        sample_name="$(echo ${read_file_name} | cut -d '_' -f2)"
-        sample_lane="$(echo ${read_file_name} | grep -Po 'L\d{3}')"
-        sample_flowcell="$(echo ${read_file_name} | cut -d '_' -f1)"
+
+        sample_name="$(echo "${read_file_basename}" | cut -d '_' -f2)"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}')"
+        sample_flowcell="$(echo "${read_file_basename}" | cut -d '_' -f1)"
         sample_library="${sample_name}"
 
+    elif [[ "${fastq_identifier}" == "novogene" ]]; then
+        # ANT_5975_WB_EKDN250004460-1A_22YCG2LT3_L8_1.fq
+        # ANT_5975_WB_EKDN250004460-1A_22YCG2LT3_L8_1.trim.fastq.gz
+
+        # sample_name="$(echo "${read_file_basename}" | awk -F '_' '{ NF=NF-3; print }' OFS='_' )"  # number of columns needs to be checked carefully
+        # echo "ANT_5975_WB_EKDN250004460-1A_22YCG2LT3_L8" | awk -F '_' '{ NF=NF-3; print }' OFS='_'
+        # echo "ANT_6099_WB_EKDN250004469-1A_22M5WWLT4_L6" | rev | cut -f4- -d '_' | rev
+        # echo "ANT_6099_EKDN250004469-1A_22M5WWLT4_L6" | awk -F '_' '{ NF=NF-3; print }' OFS='_'
+        # echo "ANT_6099_EKDN250004469-1A_22M5WWLT4_L6" | rev | cut -f4- -d '_' | rev
+        # echo "6099_EKDN250004469-1A_22M5WWLT4_L6" | awk -F '_' '{ NF=NF-3; print }' OFS='_'
+        # echo "6099_EKDN250004469-1A_22M5WWLT4_L6" | rev | cut -f4- -d '_' | rev
+        sample_name="$(echo "${read_file_basename}" | rev | cut -f4- -d '_' | rev )"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{1}')"
+        sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
+        sample_library="$(echo "${read_file_basename}" | rev | cut -f3 -d '_' | rev )"
     fi
+
+    # for i in "${bam_dir}/"*.sort.bam; do
+    #     sample_name=$(basename ${i} | awk -F '_' '{ NF=NF-3; print }' OFS='_' ); echo $(basename $i); echo ${sample_name};
+    # done
+    # ANT_5975_WB_EKDN250004460-1A_22YCG2LT3_L8.sort.bam
+    # ANT_5975_WB
+    # ANT_6099_EKDN250004469-1A_22M5WWLT4_L6.sort.bam
+    # ANT_6099
+
+    # for r1 in "${trimmed_fastq_dir}/"*_1.trim.fastq.gz; do
+    #     read_file_path="${r1%_1.trim.fastq.gz}";
+    #     read_file_basename="${read_file_path##*/}";
+    #     sample_name="$(echo "${read_file_basename}" | awk -F '_' '{ NF=NF-3; print }' OFS='_' )"; echo ${sample_name} - basename ${read_file_basename};
+    # done
+    # ANT_5975_WB - basename ANT_5975_WB_EKDN250004460-1A_22YCG2LT3_L8
+    # ANT_6099 - basename ANT_6099_EKDN250004469-1A_22M5WWLT4_L6
 
     RG_ID="${sample_name}.${sample_flowcell}.${sample_lane}" #.barcode?
     RG_SM="${sample_name}"
@@ -319,7 +350,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     species=
     species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        printf "\nCould not find sample ${read_file_name} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
+        printf "\nCould not find sample ${read_file_basename} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
         exit 1
     fi
 
@@ -339,56 +370,77 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_name}. Exiting...\n"
+        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_basename}. Exiting...\n"
         exit 1
     fi
 
-    # skip if (filtered) bam file is already present
-    if [[ -f "${bam_dir}/${read_file_name}.sort.human.bam" && -f  "${bam_dir}/${read_file_name}.sort.bam" ]]; then
-        printf "\nBAM files found for ${read_file_name}, skipping...\n"
-        continue
-    fi
-
-    printf "\nMapping raw reads to human reference for read file %s, flowcell %s, lane %s of sample %s, assigned to library / read group %s ...\n" "${read_file_name}" "${sample_flowcell}" "${sample_lane}" "${sample_name}" "${RG_LB}"
-    printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_name}"
-
     # map to human reference genome first to remove host reads
-    bwa mem \
-        -t "${n_threads}" \
-        -Y -K 100000000 \
-        -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}" \
-        "${ref_human}" \
-        "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
-        "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
-    # sort and compress to bam
-        samtools sort --threads "${n_threads}" \
-            -o "${bam_dir}/${read_file_name}.sort.human.bam"
+    if [[ ! -f "${bam_dir}/${read_file_basename}.sort.human.bam" ]]; then
+        printf "\nMapping raw reads to human reference for read file %s, flowcell %s, lane %s of sample %s, assigned to library / read group %s ...\n" "${read_file_basename}" "${sample_flowcell}" "${sample_lane}" "${sample_name}" "${RG_LB}"
+        printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_basename}"
 
-    # extract all unmapped pairs (both reads unmapped)
-    # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
-    # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
-    printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_name}"
-    printf "\nCreating bam file: %s.sort.bam\n" "${bam_dir}/${read_file_name}"
-
-    samtools view -b -f 12 "${bam_dir}/${read_file_name}.sort.human.bam" |
-    # convert back to fastq
-        samtools collate -Oun128 - |
-        samtools fastq -OT RG,BC - |
-    # map to plasmodium genome
-    # -CH adds back original read group info
-    # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
         bwa mem \
             -t "${n_threads}" \
             -Y -K 100000000 \
-            -CH <(samtools view -H "${bam_dir}/${read_file_name}.sort.human.bam" | grep ^@RG) \
-            -p \
-            "${ref}" \
-            - |
-    # sort and compress to bam
-        samtools sort --threads "${n_threads}" \
-            -o "${bam_dir}/${read_file_name}.sort.bam"
+            -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\tPU:${RG_PU}\tLB:${RG_LB}" \
+            "${ref_human}" \
+            "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
+            "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
+        # sort and compress to bam
+            samtools sort --threads "${n_threads}" \
+                -o "${bam_dir}/${read_file_basename}.sort.human.bam"
+    else
+        # skip human alignment if .sort.human.bam file is already present
+        printf "\nHuman aligned BAM file found for ${read_file_basename}, skipping...\n"
+    fi
 
-    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------\n"
+    # extract all unmapped pairs (both reads unmapped)
+    # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
+    if [[ ! -f "${bam_dir}/${read_file_basename}.sort.bam" ]]; then
+        # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
+        printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_basename}"
+        printf "\nCreating bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
+
+        samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
+        # convert back to fastq
+            samtools collate -Oun128 - |
+            samtools fastq -OT RG,BC - |
+        # map to plasmodium genome
+        # -CH adds back original read group info
+        # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
+            bwa mem \
+                -t "${n_threads}" \
+                -Y -K 100000000 \
+                -CH <(samtools view -H "${bam_dir}/${read_file_basename}.sort.human.bam" | grep ^@RG) \
+                -p \
+                "${ref}" \
+                - |
+        # sort and compress to bam
+            samtools sort --threads "${n_threads}" \
+                -o "${bam_dir}/${read_file_basename}.sort.bam"
+    else
+        # skip parasite alignment if .sort.bam file is already present
+        printf "\nParasite aligned BAM files found for ${read_file_basename}, skipping...\n"
+    fi
+
+    # fix readgroups
+    # printf "Fixing RG readgroups for ${bam_dir}/${read_file_basename}.sort.bam:"
+    # printf "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}"
+
+    # samtools addreplacerg -r "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}" -m overwrite_all -o "${bam_dir}/${read_file_basename}.sort.bam.fixed" "${bam_dir}/${read_file_basename}.sort.bam"
+
+    # printf "Fixing RG readgroups for ${bam_dir}/${read_file_basename}.sort.human.bam:"
+
+    # samtools addreplacerg -r "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}" -m overwrite_all -o "${bam_dir}/${read_file_basename}.sort.human.bam.fixed" "${bam_dir}/${read_file_basename}.sort.human.bam"
+
+    # # rename old files
+    # mv "${bam_dir}/${read_file_basename}.sort.bam" "${bam_dir}/${read_file_basename}.sort.bam.wrongRG"
+    # mv "${bam_dir}/${read_file_basename}.sort.human.bam" "${bam_dir}/${read_file_basename}.sort.human.bam.wrongRG"
+    # # rename new files
+    # mv "${bam_dir}/${read_file_basename}.sort.bam.fixed" "${bam_dir}/${read_file_basename}.sort.bam"
+    # mv "${bam_dir}/${read_file_basename}.sort.human.bam.fixed" "${bam_dir}/${read_file_basename}.sort.human.bam"
+
+    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------"
 done
 
 # picard mark duplicates
@@ -454,15 +506,21 @@ export -f add_input_prefix
 # ! Note that single quotes are required to avoid the command substitution around the
 # ! add_input_prefix function call from being executed before it is passed to parallel
 
-if [[ "${fastq_identifier}" == "name_first" ]]; then
-    field=1
-elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
-    field=2
-fi
-
 for i in "${bam_dir}/"*.sort.bam; do
-    sample_name=$(basename "${i}" | cut -d '_' -f ${field} )
-    if [[ -f "${bam_dir}/${sample_name}.sort.markdup.bam" ]]; then continue; fi
+    # parse file name
+    if [[ "${fastq_identifier}" == "name_first" ]]; then
+        # 23060404_HTK3CDMXY_L001.sort.bam
+        sample_name=$(basename "${i}" | cut -d '_' -f1)
+    elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
+        # 22GTGTLT4_106264-001-113_TTGTTGCA-GACGTCGT_L008.sort.bam
+        sample_name=$(basename "${i}" | cut -d '_' -f2)
+    elif [[ "${fastq_identifier}" == "novogene" ]]; then
+        # ANT_6745_EKDN250004467-1A_22M5WWLT4_L6.sort.bam
+        sample_name=$(basename "${i}" | awk -F '_' '{ NF=NF-3; print }' OFS='_' )   # note that there is one fewer field now that _R1 and _R2 have been trimmed
+    fi
+    # check if combined markdup file already exists
+    if [[ -f "${bam_dir}/${sample_name}.sort.markdup.bam" ]]; then continue; fi # do not print warning message because it will mess up the names being fed to parallel (unless sent to stder?)
+    # echo sample name to pass it to parallel
     echo "${sample_name}";
 done \
     | sort -u \

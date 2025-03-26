@@ -292,6 +292,8 @@ fastp_command() {
         return 0
     fi
 
+    printf "\Running fastp on "${in1}" and "${in2}"\n"
+
     fastp \
         --in1 "${in1}" \
         --in2 "${in2}" \
