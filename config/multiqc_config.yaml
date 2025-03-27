@@ -16,6 +16,17 @@ module_order:
       anchor: "fastqc_raw"
       path_filters:
         - "*R[1,2]_fastqc.zip"
-  - picard_config:
-      s_name_filenames: true
+        - "*_[1,2]_fastqc.zip"
+#   - picard_config:
+#       s_name_filenames: true
 plots_force_interactive: true
+
+# TODO: check if this fixes Picard naming convention (i.e. use file name instead of grabbing first name from --INPUT field)
+picard_config:
+  s_name_filenames: true
+
+fn_ignore_dirs:
+  - "gatk"
+  - "multiqc"
+  - "snpeff"
+  - "bwa-wrongspecies"
