@@ -153,7 +153,7 @@ n_threads="${SLURM_CPUS_PER_TASK:-8}"
 # by defining everything here, there is no need to `cd` to directories first
 # ! trailing slash is needed for `find`
 fastq_dir="$(realpath "${input_dir:-"${PROJECT_ROOT}/data/fastq/"}")"
-output_dir="$(realpath "${output_dir:-"${PROJECT_ROOT}/results/"}")"
+output_dir="$(realpath -m "${output_dir:-"${PROJECT_ROOT}/results/"}")"
 
 # define default pair suffix and file extensions
 read_2_suffix=${read_2_suffix:-"_R2_001"}
