@@ -41,8 +41,6 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -r1 | --read_1_suffix R1_001            Suffix for read pair 1 (excluding file extension)
     -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
     -e | --read_file_extension .fastq.gz    Read file extension
-    -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
-                                            "name_first", "flowcell_first" or "novogene".
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
 EOF
@@ -131,21 +129,6 @@ while :; do
             die 'ERROR: "--read_file_extension" requires a non-empty option argument.'
             ;;
 
-        -n|--fastq_identifier)       # Takes an option argument; ensure it has been specified.
-            if [ "$2" ]; then
-                fastq_identifier=$2
-                shift
-            else
-                die 'ERROR: "--fastq_identifier" requires a non-empty option argument.'
-            fi
-            ;;
-        --fastq_identifier=?*)
-            fastq_identifier=${1#*=} # Delete everything up to "=" and assign the remainder.
-            ;;
-        --fastq_identifier=)         # Handle the case of an empty --output_dir=
-            die 'ERROR: "--fastq_identifier" requires a non-empty option argument.'
-            ;;
-
         -p|--single_species)       # Takes an option argument; ensure it has been specified.
             if [ "$2" ]; then
                 single_species=$2
@@ -186,13 +169,6 @@ vcf_dir="${output_dir}/gatk/"
 
 # output directories will be created per species later on in the script
 # mkdir -p "${vcf_dir}" "${vcf_dir}/haplotypecaller" "${vcf_dir}/genomicsdbimport" "${vcf_dir}/genotypegvcfs" "${vcf_dir}/variantfilter/snp" "${vcf_dir}/variantfilter/indel"
-
-# set fastq identifier structure
-fastq_identifier=${fastq_identifier:-}
-if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" ]]; then
-    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first" or "novogene".\n"
-    exit 1
-fi
 
 # config files
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
@@ -333,27 +309,11 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
     # convert to basename of each read without the filepath prefix
     sample_name="${bam_path##*/}"
 
-    # TODO: modify this to read from samplesheet.csv instead
-    # retrieve lane and sample group
-
-    # get sample id for lookup in samplesheet
-    # note that filename is now different from the fastq and pre-markduplicate .sort.bam (lanes/libraries are merged now), so this parsing step should not required anymore technically
-    if [[ "${fastq_identifier}" == "name_first" ]]; then
-        # 23060404.sort.markdup.bam
-        sample_id="$(echo "${sample_name}" | cut -d '_' -f1)"
-    elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
-        # 106264-001-116.sort.markdup.bam
-        sample_id="$(echo "${sample_name}" | cut -d '_' -f2)"
-    elif [[ "${fastq_identifier}" == "novogene" ]]; then
-        # ANT_5975_WB.sort.markdup.bam
-        sample_id="${sample_name}"
-    fi
-
     # unset species to make sure there are no leftovers from previous iterations
     species=
-    species=$(awk -v pat="${sample_id}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
+    species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        printf "\nCould not find sample ${bam} (search query = ${sample_id}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
+        printf "\nCould not find sample ${bam} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
         exit 1
     fi
 
