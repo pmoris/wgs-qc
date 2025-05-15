@@ -8,7 +8,8 @@
 ##################################################
 
 # set bash strict mode - optionally add x to show commands
-set -euo pipefail
+# set -euo pipefail
+# disabled because of the many gotchas, see https://mywiki.wooledge.org/BashPitfalls?highlight=%28pipefail%29#set_-euo_pipefail
 
 # allow debug mode by running `TRACE=1 ./script.sh`
 if [[ "${TRACE-0}" == "1" ]]; then set -x; fi
