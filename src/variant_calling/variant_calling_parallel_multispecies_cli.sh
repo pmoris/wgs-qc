@@ -304,6 +304,28 @@ else
     mem=4
 fi
 
+# function for running gatk haplotypecaller using parallel
+run_HaplotypeCaller() {
+    region=${1}
+
+    # skip if g.vcf already exists
+    if [[ -f "${vcf_dir}/${species}/haplotypecaller/${sample_name}.${region}.g.vcf.gz" ]]; then
+        printf "\nGVCF file found for ${sample_name} and region ${region}, skipping creation of ${vcf_dir}/${species}/haplotypecaller/${sample_name}.${region}.g.vcf.gz...\n"
+        exit 0
+    fi
+
+    printf "\nProcessing region ${region} and saving output in ${vcf_dir}/${species}/haplotypecaller/${sample_name}.${region}.g.vcf.gz\n"
+
+    gatk --java-options "-Xmx${mem}g" HaplotypeCaller \
+        -R "${ref}" \
+        -I "${bam}" \
+        -O "${vcf_dir}/${species}/haplotypecaller/${sample_name}.${region}.g.vcf.gz" \
+        --native-pair-hmm-threads 4 \
+        --intervals ${region} \
+        -ERC GVCF
+}
+export -f run_HaplotypeCaller
+
 # Call variants per sample
 for bam in "${bam_dir}"/*.sort.markdup.bam; do
     printf "\nCalling variants per region for ${bam}...\nParallellizing across ${jobs} jobs and assigning each ${mem}G of memory...\n"
@@ -347,26 +369,20 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
     intervals=
     intervals="${ref%.fasta}.bed"
 
-    # skip if g.vcf already exists
-    if [[ -f "${vcf_dir}/${species}/haplotypecaller/${sample_name}.{}.g.vcf.gz" ]]; then
-        printf "\GVCF files found for ${sample_name}, skipping...\n"
-        continue
-    fi
+    # export variables required for inner function in parallel
+    export intervals vcf_dir species sample_name mem ref bam
 
-    # sample_name=$(basename ${bam} .sort.markdup.bam)
-    printf "\nCalling haplotypes for ${species} sample ${sample_name} using reference ${ref} and intervals ${intervals}\n"
+    # run haplotypecaller in parallel per region
+    printf "\nRunning GATK HaplotypeCaller for ${species} sample ${sample_name} using reference ${ref} and intervals ${intervals}.\n"
 
-    # cut -f1 "${ref}.bed" | \
     cut -f1 "${intervals}" | \
     parallel -j "${jobs}" --halt now,fail=1 \
-        gatk --java-options "-Xmx${mem}g" HaplotypeCaller \
-            -R "${ref}" \
-            -I "${bam}" \
-            -O "${vcf_dir}/${species}/haplotypecaller/${sample_name}.{}.g.vcf.gz" \
-            --native-pair-hmm-threads 4 \
-            --intervals {} \
-            -ERC GVCF
+        run_HaplotypeCaller {}
 done
+
+# optional exist in case joint calling will happen later on multiple directories
+# printf "\n#######################\nEarly end of variant calling script before joint calling on gVCF files...\n#######################\n"
+# exit 0
 
 # Combine gvfcs for each species, perform joint genotyping and filter variants
 for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
