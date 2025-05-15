@@ -219,6 +219,10 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         -csvStats "${ann_dir}/${species}/snpEff_summary_filtered.csv" \
         "${vcf_dir}/${species}/combined.filtered.vcf.gz" > "${ann_dir}/${species}/combined.filtered.ann.vcf"
 
+    gatk VariantsToTable -V "${ann_dir}/${species}/combined.filter_added.ann.vcf" -F CHROM -F POS -F TYPE -GF GT -O "${ann_dir}/${species}/combined.filter_added.table"
+
+    gatk VariantsToTable -V "${ann_dir}/${species}/combined.filtered.ann.vcf" -F CHROM -F POS -F TYPE -GF GT -O "${ann_dir}/${species}/combined.filtered.table"
+
     # # aggregate results with multiQC
     # multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
 
