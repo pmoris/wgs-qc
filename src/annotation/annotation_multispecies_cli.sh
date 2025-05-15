@@ -134,6 +134,7 @@ ref_pv="PlasmoDB-68_PvivaxPAM"
 ref_pm="PlasmoDB-68_PmalariaeUG01"
 ref_poc="PlasmoDB-68_PovalecurtisiGH01"
 ref_pow="PlasmoDB-68_PovalewallikeriPowCR01"
+ref_pk="PlasmoDB-68_PknowlesiH"
 
 # config files
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
@@ -193,6 +194,8 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ "${species}" == "pk" ]]; then
+        ref="${ref_pk}"
     elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
         ref="${single_species}"
     fi

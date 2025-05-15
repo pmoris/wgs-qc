@@ -181,7 +181,7 @@ ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PvPAM/PlasmoDB/PlasmoDB-release-68/Plasm
 ref_pm="${PROJECT_ROOT}/data/ref/Pmalariae/UG01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PmalariaeUG01_Genome.fasta"
 ref_poc="${PROJECT_ROOT}/data/ref/Povale/curtisi/PocGH01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.fasta"
 ref_pow="${PROJECT_ROOT}/data/ref/Povale/wallikeri/PowCR01/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
-#ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
+ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
 # ref_phix="${PROJECT_ROOT}/data/ref/PhiX/PhiX-NC_001422.1.fasta"
 
 # intervals="/data/antwerpen/grp/ap_itg_mu/public_data/reference_genomes/Pvivax/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.bed"
@@ -202,7 +202,7 @@ if [ ! -d "${bam_dir}" ]; then
 fi
 
 # check if reference fasta files exists
-for ref in ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm}; do
+for ref in ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk}; do
     if ! [ -f "${ref}" ]; then
         printf "\nReference fasta file not found (${ref}).\n"
         exit 1
@@ -222,6 +222,7 @@ Reference Pvivax:           ${ref_pv}
 Reference Pmalaria:         ${ref_pm}
 Reference Povale wallikeri: ${ref_pow}
 Reference Povale curtisi:   ${ref_poc}
+Reference Pknowlesi:        ${ref_pk}
 threads:                    ${n_threads}
 "
 
@@ -250,6 +251,8 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
+    elif [[ "${species}" == "pk" ]]; then
+        ref="${ref_pk}"
     elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
         ref="${single_species}"
     fi
@@ -330,7 +333,9 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
-    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+    elif [[ "${species}" == "pk" ]]; then
+        ref="${ref_pk}"
+    elif [[ -z "${single_species:-}" && "${single_species:-}" =~ ^(pf|pv|pm|pow|poc|pk)$ ]]; then
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
@@ -379,7 +384,9 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${ref_pow}"
     elif [[ "${species}" == "poc" ]]; then
         ref="${ref_poc}"
-    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
+    elif [[ "${species}" == "pk" ]]; then
+        ref="${ref_pk}"
+    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc|pk)$ ]]; then
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then

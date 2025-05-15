@@ -225,7 +225,7 @@ ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PvPAM/PlasmoDB/PlasmoDB-release-68/Plasm
 ref_pm="${PROJECT_ROOT}/data/ref/Pmalariae/UG01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PmalariaeUG01_Genome.fasta"
 ref_poc="${PROJECT_ROOT}/data/ref/Povale/curtisi/PocGH01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.fasta"
 ref_pow="${PROJECT_ROOT}/data/ref/Povale/wallikeri/PowCR01/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
-#ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
+ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
 ref_phix="${PROJECT_ROOT}/data/ref/PhiX/PhiX-NC_001422.1.fasta"
 
 # combined reference genomes and bed files for competitive mapping
@@ -270,7 +270,7 @@ if [ ! -d "${trimmed_fastq_dir}" ]; then
 fi
 
 # check if reference fasta files exists
-for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm}; do
+for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk}; do
     if ! [ -f "${ref}" ]; then
         printf "\nReference fasta file not found (${ref}).\n"
         exit 1
@@ -295,6 +295,7 @@ Reference Pvivax:           ${ref_pv}
 Reference Pmalaria:         ${ref_pm}
 Reference Povale wallikeri: ${ref_pow}
 Reference Povale curtisi:   ${ref_poc}
+Reference Pknowlesi:        ${ref_pk}
 threads:                    ${n_threads}
 Alignment mode:             ${alignment_mode}
 "
@@ -304,7 +305,7 @@ Alignment mode:             ${alignment_mode}
 ####################
 
 # create reference index if it does not yet exist
-for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc}; do
+for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc} ${ref_pk}; do
     for i in "${ref}."{amb,ann,bwt,pac,sa}; do
         if ! [ -f "${i}" ]; then
             index_files_found=0
