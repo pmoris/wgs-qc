@@ -612,22 +612,55 @@ printf "\nUsing %s GB of memory per job (n_jobs = %s)\n" "${mem}" "${jobs}"
 
 # alternatively, change initial loop to report including _ before L (and also L itself?) and then remove it again when creating outputs?
 
-# TODO: refactor into function to allow skipping, logging, etc.
-# NOTE: final _ needs to be present after id, to ensure names are not extended like S1 -> S11
+function run_markduplicates() {
+    # check if combined markdup file already exists
+    if [[ -f "${bam_dir}/${1}.sort.markdup.bam" ]]; then
+        # skip extraction if parasite bam file is already present
+        printf "\nDuplicate-marked BAM file found for ${1}, skipping...\n"
+        # return 0;
+    else
+        printf "\nCombining and marking duplicates for sample ${1} using input files: $(add_input_prefix ${1}).\n"
+        gatk --java-options -Xmx${mem}G \
+            MarkDuplicates \
+                $(add_input_prefix "${1}") \
+                --OUTPUT "${bam_dir}/${1}.sort.markdup.bam" \
+                --METRICS_FILE "${bam_dir}/${1}.markdup.metrics" \
+                --REMOVE_DUPLICATES false
+    fi
+}
 
-export bam_dir
 function add_input_prefix() {
+# NOTE: final _ or .suffix needs to be present after id, to ensure names are not extended like S1 -> S11
+
+    # set correct file name pattern
+    if [[ "${fastq_identifier}" == "name_first" ]]; then
+        # 23060404_HTK3CDMXY_L001.sort.bam
+        # ERR5740747.sort.bam
+        pattern="${1}[_.]*sort.bam"
+    elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
+        # 22GTGTLT4_106264-001-113_TTGTTGCA-GACGTCGT_L008.sort.bam
+        pattern="*_${1}_*.sort.bam"
+    elif [[ "${fastq_identifier}" == "novogene" ]]; then
+        # ANT_6745_EKDN250004467-1A_22M5WWLT4_L6.sort.bam
+        pattern="${1}_*.sort.bam"
     # echo ${1};
+    fi
+
     declare -a arr=()
-    for i in "${bam_dir}/"*"${1}_"*".sort.bam"; do
+    # NOTE: do not enclose pattern variable in quotes, as this will prevent glob pathname expansion
+    for i in "${bam_dir}/"${pattern}; do
+    # for i in "${bam_dir}/"*"${1}_"*".sort.bam"; do
         arr+=( "--INPUT ${i}" )
     done;
     echo ${arr[@]}
 }
-export -f add_input_prefix
 
-# ! Note that single quotes are required to avoid the command substitution around the
-# ! add_input_prefix function call from being executed before it is passed to parallel
+# export functions and variables so that they are accessible by parallel
+export bam_dir
+export fastq_identifier
+export mem
+export -f add_input_prefix
+export -f run_markduplicates
 
 for i in "${bam_dir}/"*.sort.bam; do
     # parse file name
@@ -648,12 +681,7 @@ for i in "${bam_dir}/"*.sort.bam; do
 done \
     | sort -u \
     | parallel -j "${jobs}" --halt now,fail=1 \
-        gatk --java-options -Xmx${mem}G \
-            MarkDuplicates \
-            '$(add_input_prefix {})' \
-            --OUTPUT "${bam_dir}/{}.sort.markdup.bam" \
-            --METRICS_FILE "${bam_dir}/{}.markdup.metrics" \
-            --REMOVE_DUPLICATES false
+        run_markduplicates {}
 
 # for bam in results-testset/bwa/*.sort.bam; do echo "${bam%%_L*}"; done | sort -u | while read -r line ; do array=(${line}*.sort.bam); echo ${array[@]}; done
 
