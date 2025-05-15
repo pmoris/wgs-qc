@@ -42,6 +42,8 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
                                             "name_first", "flowcell_first" or "novogene".
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
+    -c | --competitive                      Enable competitive mapping mode instead of
+                                            first filtering against the human genome.
 EOF
 }
 
@@ -158,6 +160,10 @@ while :; do
             die 'ERROR: "--single_species" requires a non-empty option argument.'
             ;;
 
+        -c|--competitive)
+            competitive="true"
+            ;;
+
         --)              # End of all options.
             shift
             break
@@ -195,6 +201,13 @@ read_file_extension=${read_file_extension:-".fastq.gz"}     # extension of trimm
 fastq_identifier=${fastq_identifier:-}
 if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" ]]; then
     printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first" or "novogene".\n"
+# set alignment mode
+if [[ -z "${competitive:-}" ]]; then
+    alignment_mode="filter"
+elif [[ "${competitive:-}" == "true" ]]; then
+    alignment_mode="competitive"
+else
+    printf "\nAlignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode.\n"
     exit 1
 fi
 
@@ -210,6 +223,35 @@ ref_poc="${PROJECT_ROOT}/data/ref/Povale/curtisi/PocGH01/PlasmoDB/PlasmoDB-relea
 ref_pow="${PROJECT_ROOT}/data/ref/Povale/wallikeri/PowCR01/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.fasta"
 #ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.fasta"
 ref_phix="${PROJECT_ROOT}/data/ref/PhiX/PhiX-NC_001422.1.fasta"
+
+# combined reference genomes and bed files for competitive mapping
+
+# # RefSeq
+# ref_pf_combined="${PROJECT_ROOT}/data/ref/combined/human_pf/GRCh38.p14_3D7/RefSeq/GCF_000001405.40_GCF_000002765.6/concat-GCF_000001405.40_GRCh38.p14_genomic-GCF_000002765.6_GCA_000002765_genomic.fna.gz"
+# ref_pv_combined="${PROJECT_ROOT}/data/ref/combined/human_pv/GRCh38.p14_PvPAM/RefSeq-GenBank/GCF_000001405.40_GCA_949152365.1/concat-GCF_000001405.40_GRCh38.p14_genomic-GCA_949152365.1_PVPAM_genomic.fna.gz"
+# ref_pm_combined="${PROJECT_ROOT}/data/ref/combined/human_pm/GRCh38.p14_UG01/RefSeq/GCF_000001405.40_GCF_900090045.1/concat-GCF_000001405.40_GRCh38.p14_genomic-GCF_900090045.1_PmUG01_genomic.fna.gz"
+# ref_poc_combined="${PROJECT_ROOT}/data/ref/combined/human_poc/GRCh38.p14_PocGH01/RefSeq-GenBank/GCF_000001405.40_GCA_900090035.2/concat-GCF_000001405.40_GRCh38.p14_genomic-GCA_900090035.2_PocGH01_genomic.fna.gz"
+# ref_pow_combined="${PROJECT_ROOT}/data/ref/combined/human_pow/GRCh38.p14_PowCR01/RefSeq-Genbank/GCF_000001405.40_GCA_900090025.2/concat-GCF_000001405.40_GRCh38.p14_genomic-GCA_900090025.2_PowCR01_genomic.fna.gz"
+# bed_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/3D7/RefSeq/GCF_000002765.6/GCF_000002765.6_GCA_000002765_genomic.bed"
+# bed_pv="${PROJECT_ROOT}/data/ref/Pvivax/PvPAM/GenBank/GCA_949152365.1_PVPAM/GCA_949152365.1_PVPAM_genomic.bed"
+# bed_pm="${PROJECT_ROOT}/data/ref/Pmalariae/UG01/RefSeq/GCF_900090045.1/GCF_900090045.1_PmUG01_genomic.bed"
+# bed_poc="${PROJECT_ROOT}/data/ref/Povale/curtisi/PocGH01/GenBank/GCA_900090035.2/GCA_900090035.2_PocGH01_genomic.bed"
+# bed_pow="${PROJECT_ROOT}/data/ref/Povale/wallikeri/PowCR01/GenBank/GCA_900090025.2/GCA_900090025.2_PowCR01_genomic.bed"
+# bed_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/RefSeq/GCF_000006355.2/GCF_000006355.2_GCA_000006355.2_genomic.bed"
+
+## Gencode-PlasmoDB
+ref_pf_combined="${PROJECT_ROOT}/data/ref/combined/human_pf/GRCh38.p14_3D7/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_Pfalciparum3D7_Genome-GRCh38.primary_assembly.genome.fna.gz"
+ref_pv_combined="${PROJECT_ROOT}/data/ref/combined/human_pv/GRCh38.p14_PvPAM/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_PvivaxPAM_Genome-GRCh38.primary_assembly.genome.fna.gz"
+ref_pm_combined="${PROJECT_ROOT}/data/ref/combined/human_pm/GRCh38.p14_UG01/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_PmalariaeUG01_Genome-GRCh38.primary_assembly.genome.fna.gz"
+ref_poc_combined="${PROJECT_ROOT}/data/ref/combined/human_poc/GRCh38.p14_PocGH01/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_PovalecurtisiGH01_Genome-GRCh38.primary_assembly.genome.fna.gz"
+ref_pow_combined="${PROJECT_ROOT}/data/ref/combined/human_pow/GRCh38.p14_PowCR01/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_PovalewallikeriPowCR01_Genome-GRCh38.primary_assembly.genome.fna.gz"
+ref_pk_combined="${PROJECT_ROOT}/data/ref/combined/human_pk/GRCh38.p14_H/GENCODE-PlasmoDB/GENCODE-47-PlasmoDB-release-68/concat-PlasmoDB-68_PknowlesiH_Genome-GRCh38.primary_assembly.genome.fna.gz"
+bed_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/3D7/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.bed"
+bed_pv="${PROJECT_ROOT}/data/ref/Pvivax/PvPAM/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.bed"
+bed_pm="${PROJECT_ROOT}/data/ref/Pmalariae/UG01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PmalariaeUG01_Genome.bed"
+bed_poc="${PROJECT_ROOT}/data/ref/Povale/curtisi/PocGH01/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PovalecurtisiGH01_Genome.be"
+bed_pow="${PROJECT_ROOT}/data/ref/Povale/wallikeri/PowCR01/PlasmoDB-release-68/PlasmoDB-68_PovalewallikeriPowCR01_Genome.bed"
+bed_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PknowlesiH_Genome.bed"
 
 # check if samplesheet exist
 if [ ! -f "${samplesheet}" ]; then
@@ -250,6 +292,7 @@ Reference Pmalaria:         ${ref_pm}
 Reference Povale wallikeri: ${ref_pow}
 Reference Povale curtisi:   ${ref_poc}
 threads:                    ${n_threads}
+Alignment mode:             ${alignment_mode}
 "
 
 ####################
@@ -355,75 +398,154 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         exit 1
     fi
 
-    # unset ref to make sure there are no left overs from previous ref loop
-    ref=
-    if [[ "${species}" == "pf" ]]; then
-        ref="${ref_pf}"
-    elif [[ "${species}" == "pv" ]]; then
-        ref="${ref_pv}"
-    elif [[ "${species}" == "pm" ]]; then
-        ref="${ref_pm}"
-    elif [[ "${species}" == "pow" ]]; then
-        ref="${ref_pow}"
-    elif [[ "${species}" == "poc" ]]; then
-        ref="${ref_poc}"
-    elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc)$ ]]; then
-        ref="${single_species}"
-    fi
-    if [ -z "${ref:-}" ]; then
-        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_basename}. Exiting...\n"
-        exit 1
-    fi
+    # regular filter-based mapping
+    # if [[ -z "${competitive:-}" ]]; then
+    if [[ "${alignment_mode}" == "filter" ]]; then
 
-    # map to human reference genome first to remove host reads
-    if [[ ! -f "${bam_dir}/${read_file_basename}.sort.human.bam" ]]; then
+        # unset ref to make sure there are no left overs from previous ref loop
+        ref=
+        if [[ "${species}" == "pf" ]]; then
+            ref="${ref_pf}"
+        elif [[ "${species}" == "pv" ]]; then
+            ref="${ref_pv}"
+        elif [[ "${species}" == "pm" ]]; then
+            ref="${ref_pm}"
+        elif [[ "${species}" == "pow" ]]; then
+            ref="${ref_pow}"
+        elif [[ "${species}" == "poc" ]]; then
+            ref="${ref_poc}"
+        elif [[ "${species}" == "pk" ]]; then
+            ref="${ref_pk}"
+        elif [[ -z "${single_species:-}" && "${single_species}" =~ ^(pf|pv|pm|pow|poc|pk)$ ]]; then
+            ref="${single_species}"
+        fi
+        if [ -z "${ref:-}" ]; then
+            printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_basename}. Exiting...\n"
+            exit 1
+        fi
+
+        printf "\nFilter-based alignment mode was set: mapping to human reference genome ${ref_human} followed by mapping unaligned reads to parasite reference genome ${ref}.\n"
+
         printf "\nMapping raw reads to human reference for read file %s, flowcell %s, lane %s of sample %s, assigned to library / read group %s ...\n" "${read_file_basename}" "${sample_flowcell}" "${sample_lane}" "${sample_name}" "${RG_LB}"
-        printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_basename}"
 
-        bwa mem \
-            -t "${n_threads}" \
-            -Y -K 100000000 \
-            -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\tPU:${RG_PU}\tLB:${RG_LB}" \
-            "${ref_human}" \
-            "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
-            "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
-        # sort and compress to bam
-            samtools sort --threads "${n_threads}" \
-                -o "${bam_dir}/${read_file_basename}.sort.human.bam"
-    else
-        # skip human alignment if .sort.human.bam file is already present
-        printf "\nHuman aligned BAM file found for ${read_file_basename}, skipping...\n"
-    fi
+        # map to human reference genome first to remove host reads
+        if [[ ! -f "${bam_dir}/${read_file_basename}.sort.human.bam" ]]; then
 
-    # extract all unmapped pairs (both reads unmapped)
-    # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
-    if [[ ! -f "${bam_dir}/${read_file_basename}.sort.bam" ]]; then
-        # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
-        printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_basename}"
-        printf "\nCreating bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
+            printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_basename}"
 
-        samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
-        # convert back to fastq
-            samtools collate -Oun128 - |
-            samtools fastq -OT RG,BC - |
-        # map to plasmodium genome
-        # -CH adds back original read group info
-        # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
             bwa mem \
                 -t "${n_threads}" \
                 -Y -K 100000000 \
-                -CH <(samtools view -H "${bam_dir}/${read_file_basename}.sort.human.bam" | grep ^@RG) \
-                -p \
+                -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\tPU:${RG_PU}\tLB:${RG_LB}" \
+                "${ref_human}" \
+                "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
+                "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
+            # sort and compress to bam
+                samtools sort --threads "${n_threads}" \
+                    -o "${bam_dir}/${read_file_basename}.sort.human.bam"
+        else
+            # skip human alignment if .sort.human.bam file is already present
+            printf "\nHuman aligned BAM file found for ${read_file_basename}, skipping...\n"
+        fi
+
+        # extract all unmapped pairs (both reads unmapped)
+        # approach adapted from https://lh3.github.io/2021/07/06/remapping-an-aligned-bam
+        if [[ ! -f "${bam_dir}/${read_file_basename}.sort.bam" ]]; then
+            # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
+            printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_basename}"
+            printf "\nCreating parasite bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
+
+            samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
+            # convert back to fastq
+                samtools collate -Oun128 - |
+                samtools fastq -OT RG,BC - |
+            # map to plasmodium genome
+            # -CH adds back original read group info
+            # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
+                bwa mem \
+                    -t "${n_threads}" \
+                    -Y -K 100000000 \
+                    -CH <(samtools view -H "${bam_dir}/${read_file_basename}.sort.human.bam" | grep ^@RG) \
+                    -p \
+                    "${ref}" \
+                    - |
+            # sort and compress to bam
+                samtools sort --threads "${n_threads}" \
+                    -o "${bam_dir}/${read_file_basename}.sort.bam"
+        else
+            # skip parasite alignment if .sort.bam file is already present
+            printf "\nParasite aligned BAM files found for ${read_file_basename}, skipping...\n"
+        fi
+
+    # competitive mapping
+    # else
+    elif [[ "${alignment_mode}" == "competitive" ]]; then
+
+        # unset ref to make sure there are no left overs from previous ref loop
+        ref=
+        if [[ "${species}" == "pf" ]]; then
+            ref="${ref_pf_combined}"
+            bed="${bed_pf}"
+        elif [[ "${species}" == "pv" ]]; then
+            ref="${ref_pv_combined}"
+            bed="${bed_pv}"
+        elif [[ "${species}" == "pm" ]]; then
+            ref="${ref_pm_combined}"
+            bed="${bed_pm}"
+        elif [[ "${species}" == "pow" ]]; then
+            ref="${ref_pow_combined}"
+            bed="${bed_pow}"
+        elif [[ "${species}" == "poc" ]]; then
+            ref="${ref_poc_combined}"
+            bed="${bed_poc}"
+        elif [[ "${species}" == "pk" ]]; then
+            ref="${ref_pk_combined}"
+            bed="${bed_pk}"
+        fi
+
+        if ! [ -f "${bed}" ]; then
+            index_files_found=0
+            printf "\nCreating region-level bed file for ${ref}...\n"
+            awk 'BEGIN {FS="\t"}; {print $1 FS "0" FS $2}' "${ref}.fai" > "${bed}"
+        fi
+
+        # map reads to combined reference genome
+        printf "\nCompetitive alignment mode was set: mapping to concatenated reference genome ${ref} followed by extracting ${species} parasite reads from bam file.\n"
+
+        if [[ ! -f "${bam_dir}/${read_file_basename}.sort.combined.bam" ]]; then
+            printf "\nCreating combined bam file: %s.sort.combined.bam" "${bam_dir}/${read_file_basename}"
+            bwa mem \
+                -t "${n_threads}" \
+                -Y -K 100000000 \
+                -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\tPU:${RG_PU}\tLB:${RG_LB}" \
                 "${ref}" \
-                - |
-        # sort and compress to bam
+                "${read_file_path}${read_1_suffix}.trim.fastq.gz" \
+                "${read_file_path}${read_2_suffix}.trim.fastq.gz" |
+            # sort and compress to bam
             samtools sort --threads "${n_threads}" \
-                -o "${bam_dir}/${read_file_basename}.sort.bam"
+                -o "${bam_dir}/${read_file_basename}.sort.combined.bam"
+        else
+            # skip combined alignment if .sort.human.bam file is already present
+            printf "\nCombined human-parasite BAM file found for ${read_file_basename}, skipping...\n"
+        fi
+
+        # extract plasmodium reads
+        if [[ ! -f "${bam_dir}/${read_file_basename}.sort.bam" ]]; then
+            printf "\nExtracting parasite reads from combined bam file: %s.sort.combined.bam" "${bam_dir}/${read_file_basename}"
+            printf "\nCreating parasite bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
+            samtools view -b -h -L "${bed}" "${bam_dir}/${read_file_basename}.sort.combined.bam" > "${bam_dir}/${read_file_basename}.sort.bam"
+        else
+            # skip extraction if parasite bam file is already present
+            printf "\nParasite BAM file found for ${read_file_basename}, skipping...\n"
+        fi
+
+    # fallback option, should never be reached
     else
-        # skip parasite alignment if .sort.bam file is already present
-        printf "\nParasite aligned BAM files found for ${read_file_basename}, skipping...\n"
+        printf "\nAlignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode.\n"
+        exit 1
     fi
 
+    ################
     # fix readgroups
     # printf "Fixing RG readgroups for ${bam_dir}/${read_file_basename}.sort.bam:"
     # printf "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\\tPU:${RG_PU}\\tLB:${RG_LB}"
@@ -552,7 +674,12 @@ for bam in "${bam_dir}/"*.sort.markdup.bam; do
     samtools idxstats --threads "${n_threads}" "${bam}" >"${bam}.idxstats"
 done
 
-for bam in "${bam_dir}/"*.sort.human.bam; do
+if [[ "${alignment_mode}" == "filter" ]]; then
+    alignment_mode_bam_suffix="human"
+elif [[ "${alignment_mode}" == "competitive" ]]; then
+    alignment_mode_bam_suffix="combined"
+fi
+for bam in "${bam_dir}/"*.sort.${alignment_mode_bam_suffix}.bam; do
     if [[ -f "${bam}.bai" && -f "${bam}.stats" && -f "${bam}.flagstat" && -f "${bam}.idxstats" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
     samtools index --threads "${n_threads}" "${bam}"
@@ -562,7 +689,7 @@ for bam in "${bam_dir}/"*.sort.human.bam; do
 done
 
 # clean up
-# rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.human.bam
+# rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.${alignment_mode_bam_suffix}.bam
 
 # aggregate results with multiQC
 multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
