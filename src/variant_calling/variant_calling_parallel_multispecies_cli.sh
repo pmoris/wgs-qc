@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
+# Description: Script to perform variant calling on bam files
+# Author: Pieter Moris
 
+# TODO: check or remove single_species option
 # TODO: set GATK -verbosity to WARNING or ERROR instead of default INFO
 # TODO: automatically clean up genomicsDB workspace and tmp after processing each species or interval (latter option would require parallel to call custom function with separate GATK and removal steps)
-
-##################################################
-# Script to perform variant calling on bam files #
-##################################################
 
 # set bash strict mode - optionally add x to show commands
 # set -euo pipefail
@@ -37,7 +36,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -h                                      display this help and exit
     -s | --samplesheet SAMPLESHEET.CSV     File path to samplesheet with sample-species info
     -o | --output_dir OUTPUT DIRECTORY      File path to output directory; should already
-                                            contain trimmed reads directory named fastp
+                                            contain bam files.
                                             (default = PROJECT_ROOT/results/)
     -r1 | --read_1_suffix R1_001            Suffix for read pair 1 (excluding file extension)
     -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
@@ -211,7 +210,7 @@ done
 
 # log run options
 printf "
-BWA MEM script | $(basename "$0")
+Variant calling script | $(basename "$0")
 ==============================================
 
 Output directory:           ${vcf_dir}
@@ -328,7 +327,7 @@ export -f run_HaplotypeCaller
 
 # Call variants per sample
 for bam in "${bam_dir}"/*.sort.markdup.bam; do
-    printf "\nCalling variants per region for ${bam}...\nParallellizing across ${jobs} jobs and assigning each ${mem}G of memory...\n"
+    printf "\nCalling variants on ${bam} per region by parallellizing across ${jobs} jobs and assigning each ${mem}G of memory...\n"
 
     # get filepath containing basename of each read pair
     bam_path="${bam%.sort.markdup.bam}"
@@ -365,6 +364,7 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
         exit 1
     fi
 
+    # TODO: make this a pre-supplied option like fasta, in case naming convention is different for refseq than plasmodb refs (no .fasta extension for example)
     # set bed file with intervals/regions for reference species - expected file name is the same as the .fasta ref, but with a .bed extension
     intervals=
     intervals="${ref%.fasta}.bed"
@@ -387,7 +387,7 @@ done
 # Combine gvfcs for each species, perform joint genotyping and filter variants
 for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
 
-    printf "\n----------------\nCombining GVCFS, performining joint genotyping and filtering variants for all ${species} samples.\n"
+    printf "\n----------------\nCombining GVCFS, performing joint genotyping and filtering variants for all ${species} samples.\n"
 
     ref=
     if [[ "${species}" == "pf" ]]; then
@@ -412,7 +412,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
 
     # skip if combined.filtered.vcf already exists
     if [[ -f "${vcf_dir}/${species}/combined.filtered.vcf.gz" ]]; then
-        printf "\Combined filtered VCF files found for ${species}, skipping...\n"
+        printf "\nCombined filtered VCF files found for ${species}, skipping...\n"
         continue
     fi
 
@@ -428,16 +428,16 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
     cut -f1 "${intervals}" | \
     while read -r region; do
         # create sample map per region
-        > "${vcf_dir}/${species}/genomicsdbimport/sample.$region.map"
+        > "${vcf_dir}/${species}/genomicsdbimport/sample.${region}.map"
 
         # add region-specific vcf file for each sample
         for gvcf in "${vcf_dir}/${species}/haplotypecaller/"*.${region}.g.vcf.gz; do
-            echo "$(basename ${gvcf} .${region}.g.vcf.gz)"$'\t'"${gvcf}" >> "${vcf_dir}/${species}/genomicsdbimport/sample.$region.map"
+            echo "$(basename ${gvcf} .${region}.g.vcf.gz)"$'\t'"${gvcf}" >> "${vcf_dir}/${species}/genomicsdbimport/sample.${region}.map"
         done
     done
 
     # Combine gvcf files per region
-    printf "\nCombining gvcf files per region, parallellized across ${jobs} jobs and assigning each ${mem}G of memory...\n"
+    printf "\nCombining GVCFs using GATK GenomicsDBImport, parallellized by region across ${jobs} jobs and assigning each ${mem}G of memory...\n"
 
     cut -f1 "${intervals}" | \
     parallel -j "${jobs}" --halt now,fail=1 \
@@ -451,7 +451,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
             --genomicsdb-shared-posixfs-optimizations true
 
     # Joint genotyping per region
-    printf "\nPerforming joint genotyping per region, parallellized across ${jobs} jobs and assigning each ${mem}G of memory...\n"
+    printf "\nPerforming joint genotyping using GATK GenotypeGVCFs, parallellized by region across ${jobs} jobs and assigning each ${mem}G of memory...\n"
 
     cut -f1 "${intervals}" | \
     parallel -j "${jobs}" --halt now,fail=1 \
@@ -572,4 +572,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
 done
 
 # aggregate results with multiQC
+printf "\nRunning MultiQC on ${output_dir}...\n"
 multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+
+printf "\n#######################\nEnd of variant calling script\n#######################\n"

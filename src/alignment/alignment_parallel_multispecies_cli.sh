@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+# Description: Script to perform (trimmed) read alignment (competitive or filter-based) on Plasmodium and human host
+# Author: Pieter Moris
 
-#################################################################
-# Script to perform quality control and trimming of fastq reads #
-#################################################################
+# TODO: check or remove single_species option
 
 # set bash strict mode - optionally add x to show commands
 # set -euo pipefail
@@ -69,7 +69,6 @@ while :; do
         --samplesheet=)         # Handle the case of an empty --samplesheet=
             die 'ERROR: "--samplesheet" requires a non-empty option argument.'
             ;;
-
 
         -o|--output_dir)       # Takes an option argument; ensure it has been specified.
             if [ "$2" ]; then
@@ -218,7 +217,7 @@ fi
 # config files
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
 
-# reference files
+# reference genome files
 ref_human="${PROJECT_ROOT}/data/ref/human/GRCh38.p14/GENCODE/47/GRCh38.primary_assembly.genome.fa.gz"
 ref_pf="${PROJECT_ROOT}/data/ref/Pfalciparum/3D7/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_Pfalciparum3D7_Genome.fasta"
 ref_pv="${PROJECT_ROOT}/data/ref/Pvivax/PvPAM/PlasmoDB/PlasmoDB-release-68/PlasmoDB-68_PvivaxPAM_Genome.fasta"
@@ -582,8 +581,9 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     # # rename new files
     # mv "${bam_dir}/${read_file_basename}.sort.bam.fixed" "${bam_dir}/${read_file_basename}.sort.bam"
     # mv "${bam_dir}/${read_file_basename}.sort.human.bam.fixed" "${bam_dir}/${read_file_basename}.sort.human.bam"
+    ################
 
-    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------"
+    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------\n"
 done
 
 # picard mark duplicates
@@ -720,10 +720,9 @@ done \
 
 # └─▶ for i in results-testset/bwa/*.sort.bam; do echo "${i%%_L*}"; done | sort -u | parallel echo "{}*.sort.bam" "{}"
 
-printf "\nCollecting alignment stats on .sort.markdup.bam files...\n"
+printf "\nCollecting alignment stats on bam files...\n"
 
-
-# # TODO: incorporate into parallel?
+# TODO: incorporate into parallel?
 for bam in "${bam_dir}/"*.sort.markdup.bam; do
     if [[ -f "${bam}.bai" && -f "${bam}.stats" && -f "${bam}.flagstat" && -f "${bam}.idxstats" ]]; then continue; fi
     printf "\nCreating index and samtool stats for ${bam}...\n"
@@ -751,4 +750,7 @@ done
 # rm "${bam_dir}/"*.sort.bam "${bam_dir}/"*.sort.${alignment_mode_bam_suffix}.bam
 
 # aggregate results with multiQC
+printf "\nRunning MultiQC on ${output_dir}...\n"
 multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+
+printf "\n#######################\nEnd of alignment script\n#######################\n"

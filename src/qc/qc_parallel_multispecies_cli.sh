@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Description: Script to perform quality control and trimming of fastq reads
+# Author: Pieter Moris
 
 # TODO: read1/2 suffix is hard-coded here to make it easier to use in parallel
 # TODO: set threads to n_threads
@@ -8,10 +10,6 @@
 # TODO: provide references as list that can be re-used by log run options and loops?
 # TODO: clean up read file extension clean up somehow
 # TODO: add skip option for fastqc -> difficult because it is a single command for all inputs
-
-#################################################################
-# Script to perform quality control and trimming of fastq reads #
-#################################################################
 
 # set bash strict mode - optionally add x to show commands
 # set -euo pipefail
@@ -347,4 +345,7 @@ fastqc \
     "${output_dir}/fastp/"*".trim.fastq.gz"
 
 # aggregate results with multiQC
+printf "\nRunning MultiQC on ${output_dir}...\n"
 multiqc --force "${output_dir}" --config "${multiqc_conf}" --outdir "${output_dir}/multiqc"
+
+printf "\n#######################\nEnd of qc script\n#######################\n"

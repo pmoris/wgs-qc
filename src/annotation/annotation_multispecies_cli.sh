@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+# Description: Script to perform VCF annotation using snpEff
+# Author: Pieter Moris
 
-################################
-# Script to perform annotation #
-################################
+# TODO: check or remove single_species option
 
 # set bash strict mode - optionally add x to show commands
 # set -euo pipefail
@@ -34,7 +34,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -h                                      display this help and exit
     -s | --samplesheet SAMPLESHEET.CSV      File path to samplesheet with sample-species info
     -o | --output_dir OUTPUT DIRECTORY      File path to output directory; should already
-                                            contain trimmed reads directory named fastp
+                                            contain joint VCF files.
                                             (default = PROJECT_ROOT/results/)
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
@@ -87,6 +87,7 @@ while :; do
                 die 'ERROR: "--single_species" requires a non-empty option argument.'
             fi
             ;;
+
         --single_species=?*)
             single_species=${1#*=} # Delete everything up to "=" and assign the remainder.
             ;;
@@ -235,3 +236,5 @@ done
 #     printf "\nCould not find sample ${bam} (search query = ${sample_id}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
 #     exit 1
 # fi
+
+printf "\n#######################\nEnd of annotation script\n#######################\n"
