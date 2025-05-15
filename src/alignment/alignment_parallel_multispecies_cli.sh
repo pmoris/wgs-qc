@@ -39,7 +39,8 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
     -e | --read_file_extension .fastq.gz    Read file extension
     -n | --fastq_identifier <string>        Specifies structure of fastq file name. Either
-                                            "name_first", "flowcell_first" or "novogene".
+                                            "name_first", "flowcell_first", "novogene",
+                                            "name_middle" or "SRA".
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
     -c | --competitive                      Enable competitive mapping mode instead of
@@ -199,8 +200,11 @@ read_file_extension=${read_file_extension:-".fastq.gz"}     # extension of trimm
 
 # set fastq identifier structure
 fastq_identifier=${fastq_identifier:-}
-if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" ]]; then
-    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first" or "novogene".\n"
+if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" || "${fastq_identifier}" == "name_middle" || "${fastq_identifier}" == "SRA" ]]; then
+    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first", "novogene", "name_middle" or "SRA".\n"
+    exit 1
+fi
+
 # set alignment mode
 if [[ -z "${competitive:-}" ]]; then
     alignment_mode="filter"
@@ -331,11 +335,11 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     # retrieve lane and sample group
 
     if [[ "${fastq_identifier}" == "name_first" ]]; then
-        # ANT5797_S262_L001_R1_001.fastq
-
+        # ANT5797_S262_L001_R1_001.trim.fastq.gz
+        # ERR5740747_1.trim.fastq.gz
         sample_name="$(echo "${read_file_basename}" | cut -d '_' -f1)"
         # sample="${read_file_basename%%_*}"
-        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}')"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}' || echo "L001")"    # fall back on L001 if missing, to stop set -u from stopping script
         # sample_lane="${read_file_basename##*_}"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
 
@@ -367,6 +371,21 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{1}')"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
         sample_library="$(echo "${read_file_basename}" | rev | cut -f3 -d '_' | rev )"
+
+    elif [[ "${fastq_identifier}" == "name_middle" ]]; then
+        # FCHTVJYCCXY_L2_WHRDMALtbmRABCAA-111_1.fq.gz
+        sample_name="$(echo "${read_file_basename}" | cut -d '_' -f3)"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po '_L\d{1,3}_' | sed 's/_//g')"
+        sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
+        sample_library="${sample_name}"
+
+    elif [[ "${fastq_identifier}" == "SRA" ]]; then
+        # SAMEA1527532_ERX151701_ERR175555_1.fastq.gz
+        sample_name=$(basename "${read_file_basename}" | cut -d '_' -f1)
+        sample_lane=$(basename "${read_file_basename}" | cut -d '_' -f3)
+        sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
+        sample_library=$(basename "${read_file_basename}" | cut -d '_' -f2)
+
     fi
 
     # for i in "${bam_dir}/"*.sort.bam; do
@@ -643,7 +662,12 @@ function add_input_prefix() {
     elif [[ "${fastq_identifier}" == "novogene" ]]; then
         # ANT_6745_EKDN250004467-1A_22M5WWLT4_L6.sort.bam
         pattern="${1}_*.sort.bam"
-    # echo ${1};
+    elif [[ "${fastq_identifier}" == "name_middle" ]]; then
+        # FCHTVJYCCXY_L2_WHRDMALtbmRABCAA-111.sort.bam
+        pattern="*_${1}.sort.bam"
+    elif [[ "${fastq_identifier}" == "SRA" ]]; then
+        # # SAMEA1527532_ERX151701_ERR175555.sort.bam
+        pattern="${1}_*.sort.bam"
     fi
 
     declare -a arr=()
@@ -666,16 +690,22 @@ for i in "${bam_dir}/"*.sort.bam; do
     # parse file name
     if [[ "${fastq_identifier}" == "name_first" ]]; then
         # 23060404_HTK3CDMXY_L001.sort.bam
-        sample_name=$(basename "${i}" | cut -d '_' -f1)
+        # ERR5740747.sort.bam -> note that .sort.bam suffix needs to be removed, because splitting on _ would retain it as it is part of the last element
+        sample_name=$(basename "${i%.sort.bam}" | cut -d '_' -f1)
     elif [[ "${fastq_identifier}" == "flowcell_first" ]]; then
         # 22GTGTLT4_106264-001-113_TTGTTGCA-GACGTCGT_L008.sort.bam
         sample_name=$(basename "${i}" | cut -d '_' -f2)
     elif [[ "${fastq_identifier}" == "novogene" ]]; then
         # ANT_6745_EKDN250004467-1A_22M5WWLT4_L6.sort.bam
         sample_name=$(basename "${i}" | awk -F '_' '{ NF=NF-3; print }' OFS='_' )   # note that there is one fewer field now that _R1 and _R2 have been trimmed
+    elif [[ "${fastq_identifier}" == "name_middle" ]]; then
+        # FCHTVJYCCXY_L2_WHRDMALtbmRABCAA-111.sort.bam
+        # note that .sort.bam suffix needs to be removed, because splitting on _ would retain it as it is part of the last element
+        sample_name=$(basename "${i%.sort.bam}" | cut -d '_' -f3)
+    elif [[ "${fastq_identifier}" == "SRA" ]]; then
+        # # SAMEA1527532_ERX151701_ERR175555.sort.bam
+        sample_name=$(basename "${i}" | cut -d '_' -f1)
     fi
-    # check if combined markdup file already exists
-    if [[ -f "${bam_dir}/${sample_name}.sort.markdup.bam" ]]; then continue; fi # do not print warning message because it will mess up the names being fed to parallel (unless sent to stder?)
     # echo sample name to pass it to parallel
     echo "${sample_name}";
 done \
