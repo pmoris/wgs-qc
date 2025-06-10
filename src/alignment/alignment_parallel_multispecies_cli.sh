@@ -339,7 +339,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         # ERR5740747_1.trim.fastq.gz
         sample_name="$(echo "${read_file_basename}" | cut -d '_' -f1)"
         # sample="${read_file_basename%%_*}"
-        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}' || echo "L001")"    # fall back on L001 if missing, to stop set -u from stopping script
+        sample_lane="$(echo "${read_file_basename}" | grep -Po '_L\d{3}' | sed 's/_//g' || echo "L001")"    # fall back on L001 if missing, to stop set -u from stopping script
         # sample_lane="${read_file_basename##*_}"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
 
@@ -352,7 +352,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         # 22NY35LT3_106264-002-098_CCTCCTTT-CTTTCGCG_L007_R2.fastq.gz
 
         sample_name="$(echo "${read_file_basename}" | cut -d '_' -f2)"
-        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{3}')"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po '_L\d{3}' | sed 's/_//g')"
         sample_flowcell="$(echo "${read_file_basename}" | cut -d '_' -f1)"
         sample_library="${sample_name}"
 
@@ -368,7 +368,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         # echo "6099_EKDN250004469-1A_22M5WWLT4_L6" | awk -F '_' '{ NF=NF-3; print }' OFS='_'
         # echo "6099_EKDN250004469-1A_22M5WWLT4_L6" | rev | cut -f4- -d '_' | rev
         sample_name="$(echo "${read_file_basename}" | rev | cut -f4- -d '_' | rev )"
-        sample_lane="$(echo "${read_file_basename}" | grep -Po 'L\d{1}')"
+        sample_lane="$(echo "${read_file_basename}" | grep -Po '_L\d{1}' | sed 's/_//g')"
         sample_flowcell="$(zcat "${r1}" | head -n 1 | cut -d ':' -f3)" || true
         sample_library="$(echo "${read_file_basename}" | rev | cut -f3 -d '_' | rev )"
 
