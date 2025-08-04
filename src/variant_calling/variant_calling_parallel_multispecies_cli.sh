@@ -43,6 +43,10 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
     -e | --read_file_extension .fastq.gz    Read file extension
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
+    -c | --combine-early-exit               Stop after g.vcf creation so that joint/combined
+                                            variant calling script can be run afterwards on
+                                            multiple input directories instead of a single
+                                            samplesheet.csv
 EOF
 }
 
@@ -142,6 +146,10 @@ while :; do
             ;;
         --single_species=)         # Handle the case of an empty --output_dir=
             die 'ERROR: "--single_species" requires a non-empty option argument.'
+            ;;
+
+        -c|--combine-early-exit)
+            early_exit="true"
             ;;
 
         --)              # End of all options.
@@ -381,8 +389,11 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
 done
 
 # optional exist in case joint calling will happen later on multiple directories
-# printf "\n#######################\nEarly end of variant calling script before joint calling on gVCF files...\n#######################\n"
-# exit 0
+# set alignment mode
+if [[ "${early_exit:-}" == "true" ]]; then
+    printf "\n#######################\nEarly end of variant calling script before combined/joint calling on gVCF files in multiple directories...\n#######################\n"
+    exit 0
+fi
 
 # Combine gvfcs for each species, perform joint genotyping and filter variants
 for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
