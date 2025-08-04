@@ -30,17 +30,12 @@ die() {
 
 show_help() {
 cat << EOF
-Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
-                [-r1 READ 1 SUFFIX ] [-r2 READ 2 SUFFIX ] [-e READ FILE EXTENSION ]
-                [-n <name_first/flowcell_first ]
+Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ] [-p] [-c]
     -h                                      display this help and exit
     -s | --samplesheet SAMPLESHEET.CSV     File path to samplesheet with sample-species info
     -o | --output_dir OUTPUT DIRECTORY      File path to output directory; should already
                                             contain bam files.
                                             (default = PROJECT_ROOT/results/)
-    -r1 | --read_1_suffix R1_001            Suffix for read pair 1 (excluding file extension)
-    -r2 | --read_2_suffix R2_001            Suffix for read pair 2 (excluding file extension)
-    -e | --read_file_extension .fastq.gz    Read file extension
     -p | --single_species                   Species override for all samples. Options are:
                                             pf, pv, pm poc, pow
     -c | --combine-early-exit               Stop after g.vcf creation so that joint/combined
@@ -86,51 +81,6 @@ while :; do
             ;;
         --output_dir=)         # Handle the case of an empty --output_dir=
             die 'ERROR: "--output_dir" requires a non-empty option argument.'
-            ;;
-
-        -r1|--read_1_suffix)       # Takes an option argument; ensure it has been specified.
-            if [ "$2" ]; then
-                read_1_suffix=$2
-                shift
-            else
-                die 'ERROR: "--read_1_suffix" requires a non-empty option argument.'
-            fi
-            ;;
-        --read_1_suffix=?*)
-            read_1_suffix=${1#*=} # Delete everything up to "=" and assign the remainder.
-            ;;
-        --read_1_suffix=)         # Handle the case of an empty --output_dir=
-            die 'ERROR: "--read_1_suffix" requires a non-empty option argument.'
-            ;;
-
-        -r2|--read_2_suffix)       # Takes an option argument; ensure it has been specified.
-            if [ "$2" ]; then
-                read_2_suffix=$2
-                shift
-            else
-                die 'ERROR: "--read_2_suffix" requires a non-empty option argument.'
-            fi
-            ;;
-        --read_2_suffix=?*)
-            read_2_suffix=${1#*=} # Delete everything up to "=" and assign the remainder.
-            ;;
-        --read_2_suffix=)         # Handle the case of an empty --output_dir=
-            die 'ERROR: "--read_2_suffix" requires a non-empty option argument.'
-            ;;
-
-        -e|--read_file_extension)       # Takes an option argument; ensure it has been specified.
-            if [ "$2" ]; then
-                read_file_extension=$2
-                shift
-            else
-                die 'ERROR: "--read_file_extension" requires a non-empty option argument.'
-            fi
-            ;;
-        --read_file_extension=?*)
-            read_file_extension=${1#*=} # Delete everything up to "=" and assign the remainder.
-            ;;
-        --read_file_extension=)         # Handle the case of an empty --output_dir=
-            die 'ERROR: "--read_file_extension" requires a non-empty option argument.'
             ;;
 
         -p|--single_species)       # Takes an option argument; ensure it has been specified.

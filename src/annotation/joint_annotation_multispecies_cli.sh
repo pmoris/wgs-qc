@@ -25,9 +25,7 @@ die() {
 
 show_help() {
 cat << EOF
-Usage: ${0##*/} [-h]  [-o OUTPUT DIRECTORY ]
-                [-r1 READ 1 SUFFIX ] [-r2 READ 2 SUFFIX ] [-e READ FILE EXTENSION ]
-                [-n <name_first/flowcell_first ]
+Usage: ${0##*/} [-h]  [-o OUTPUT DIRECTORY ] [-s pf pv]
     -h                                      display this help and exit
     -o | --output_dir OUTPUT DIRECTORY      File path to output directory; should already
                                             contain joint VCF files.
