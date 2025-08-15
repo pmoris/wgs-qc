@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Description: Script to perform joint variant calling on bam files jointly on provided species
+# Description: Script to perform joint genotyping on gvcf files in provided folders
+# and for provided species, as an alternative to the per-folder operation of the
+# regular variant calling script.
 # Author: Pieter Moris
 
 # TODO: set GATK -verbosity to WARNING or ERROR instead of default INFO

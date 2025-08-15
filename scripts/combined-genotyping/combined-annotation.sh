@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Description: Script to perform VCF annotation using snpEff jointly on provided species
+# Description: Script to perform VCF annotation using snpEff for provided species
 # Author: Pieter Moris
 
 # set bash strict mode - optionally add x to show commands
