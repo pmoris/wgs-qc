@@ -1,3 +1,13 @@
-data/fastq-test
+# various output/results folders
 results*/*
-slurm-*.out
+output*/*
+
+# slurm log files
+*slurm*.out
+
+# genome reference index files
+*.amb
+*.ann
+*.bwt
+*.pac
+*.sa

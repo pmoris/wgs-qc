@@ -1,8 +1,3 @@
-# sp:
-# fastqc/data:
-# fn: "fastqc_data.txt"
-# fastqc/zip:
-# fn: "*_fastqc.zip"
 module_order:
   - fastqc:
       name: "FastQC (trimmed)"
@@ -16,6 +11,13 @@ module_order:
       anchor: "fastqc_raw"
       path_filters:
         - "*R[1,2]_fastqc.zip"
-  - picard_config:
-      s_name_filenames: true
+        - "*_[1,2]_fastqc.zip"
 plots_force_interactive: true
+
+picard_config:
+  s_name_filenames: true
+
+fn_ignore_dirs:
+  - "gatk"
+  - "multiqc"
+  - "snpeff"
