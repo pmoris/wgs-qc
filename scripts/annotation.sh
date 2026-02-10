@@ -142,20 +142,17 @@ snpeff_conf="${PROJECT_ROOT}/config/snpEff.config"
 
 # check if samplesheet exist
 if [ ! -f "${samplesheet}" ]; then
-    printf "\nSamplesheet (${samplesheet}) does not exist.\n"
-    exit 1
+    die "Samplesheet (${samplesheet}) does not exist."
 fi
 
 # check if vcf directory exist
 if [ ! -d "${vcf_dir}" ]; then
-    echo "VCF input directory (${vcf_dir}) does not exist."
-    exit 1
+    die "VCF input directory (${vcf_dir}) does not exist."
 fi
 
 # check if snpeff directory exists
 if ! [ -d "${snpeff_db}" ]; then
-    echo "SnpEff database not found in expected location: (${snpeff_db})."
-    exit 1
+    die "SnpEff database not found in expected location: (${snpeff_db})."
 fi
 
 # log run options
@@ -199,8 +196,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        printf "\Unexpected species name ${species} found in samplesheet ${samplesheet} (or passed via --single_species). Exiting...\n"
-        exit 1
+        die "Unexpected species name ${species} found in samplesheet ${samplesheet} (or passed via --single_species). Exiting..."
     fi
 
     # # create snpeff database

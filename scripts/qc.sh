@@ -181,15 +181,13 @@ mkdir -p "${output_dir}/fastqc" \
 
 # check if fastq directory exist
 if [ ! -d "${fastq_dir}" ]; then
-    printf "\nFASTQ input directory (${fastq_dir}) does not exist.\n"
-    exit 1
+    die "FASTQ input directory (${fastq_dir}) does not exist."
 fi
 
 # check if reference fasta files exists
 for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk} ${ref_phix}; do
     if ! [ -f "${ref}" ]; then
-        printf "\nReference fasta file not found (${ref}).\n"
-        exit 1
+        die "Reference fasta file not found (${ref})."
     fi
 done
 

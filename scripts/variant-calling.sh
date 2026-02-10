@@ -148,21 +148,18 @@ ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/Plasmo
 
 # check if samplesheet exist
 if [ ! -f "${samplesheet}" ]; then
-    printf "\nSamplesheet (${samplesheet}) does not exist.\n"
-    exit 1
+    die "Samplesheet (${samplesheet}) does not exist."
 fi
 
 # check if bam directory exist
 if [ ! -d "${bam_dir}" ]; then
-    echo "BAM input directory (${bam_dir}) does not exist."
-    exit 1
+    die "BAM input directory (${bam_dir}) does not exist."
 fi
 
 # check if reference fasta files exists
 for ref in ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk}; do
     if ! [ -f "${ref}" ]; then
-        printf "\nReference fasta file not found (${ref}).\n"
-        exit 1
+        die "Reference fasta file not found (${ref})."
     fi
 done
 
@@ -214,8 +211,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        printf "\Unexpected species name ${species} found in samplesheet ${samplesheet} (or passed via --single_species) for index and dictionary creation. Exiting...\n"
-        exit 1
+        die "Unexpected species name ${species} found in samplesheet ${samplesheet} (or passed via --single_species) for index and dictionary creation. Exiting..."
     fi
 
     # Create reference fai and dict files if they do not yet exist
@@ -296,8 +292,7 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
     species=
     species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        printf "\nCould not find sample ${bam} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
-        exit 1
+        die "Could not find sample ${bam} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting..."
     fi
 
     # unset ref to make sure there are no left overs from previous ref loop
@@ -318,8 +313,7 @@ for bam in "${bam_dir}"/*.sort.markdup.bam; do
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${sample_name}. Exiting...\n"
-        exit 1
+        die "Could not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${sample_name}. Exiting..."
     fi
 
     # TODO: make this a pre-supplied option like fasta, in case naming convention is different for refseq than plasmodb refs (no .fasta extension for example)
@@ -367,8 +361,7 @@ for species in $(tail -n+2 "${samplesheet}" | cut -f2 -d, | sort | uniq); do
         ref="${single_species}"
     fi
     if [ -z "${ref:-}" ]; then
-        printf "\Unexpected species name ${species} found in samplesheet ${samplesheet} (or wrong option passed for --single-species) for GenomicsDBImport. Exiting...\n"
-        exit 1
+        die "Unexpected species name ${species} found in samplesheet ${samplesheet} (or wrong option passed for --single-species) for GenomicsDBImport. Exiting..."
     fi
 
     # skip if combined.filtered.vcf already exists

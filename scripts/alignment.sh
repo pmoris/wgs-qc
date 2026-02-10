@@ -200,8 +200,7 @@ read_file_extension=${read_file_extension:-".fastq.gz"}     # extension of trimm
 # set fastq identifier structure
 fastq_identifier=${fastq_identifier:-}
 if ! [[ "${fastq_identifier}" == "name_first" || "${fastq_identifier}" == "flowcell_first" || "${fastq_identifier}" == "novogene" || "${fastq_identifier}" == "name_middle" || "${fastq_identifier}" == "SRA" ]]; then
-    printf "\nFastq identifier structure was not set correctly, please specify "name_first", "flowcell_first", "novogene", "name_middle" or "SRA".\n"
-    exit 1
+    die "Fastq identifier structure was not set correctly, please specify "name_first", "flowcell_first", "novogene", "name_middle" or "SRA"."
 fi
 
 # set alignment mode
@@ -210,6 +209,7 @@ if [[ -z "${competitive:-}" ]]; then
 elif [[ "${competitive:-}" == "true" ]]; then
     alignment_mode="competitive"
 else
+    die "Alignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode."
     printf "\nAlignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode.\n"
     exit 1
 fi
@@ -258,21 +258,18 @@ bed_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/Plasmo
 
 # check if samplesheet exist
 if [ ! -f "${samplesheet}" ]; then
-    printf "\nSamplesheet (${samplesheet}) does not exist.\n"
-    exit 1
+    die "\nSamplesheet (${samplesheet}) does not exist."
 fi
 
 # check if trimmed fastq files exist
 if [ ! -d "${trimmed_fastq_dir}" ]; then
-    printf "\nTrimmed FASTQ directory (${trimmed_fastq_dir}) does not exist.\n"
-    exit 1
+    die "\nTrimmed FASTQ directory (${trimmed_fastq_dir}) does not exist."
 fi
 
 # check if reference fasta files exists
 for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk}; do
     if ! [ -f "${ref}" ]; then
-        printf "\nReference fasta file not found (${ref}).\n"
-        exit 1
+        die "\nReference fasta file not found (${ref})."
     fi
 done
 
@@ -413,8 +410,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     species=
     species=$(awk -v pat="${sample_name}" -F',' '$1 ~ pat { print $2; exit}' "${samplesheet}")
     if [ -z "${species:-}" ]; then
-        printf "\nCould not find sample ${read_file_basename} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting...\n"
-        exit 1
+        die "\nCould not find sample ${read_file_basename} (search query = ${sample_name}) during species lookup in samplesheet ${samplesheet}. Exiting..."
     fi
 
     # regular filter-based mapping
@@ -439,8 +435,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
             ref="${single_species}"
         fi
         if [ -z "${ref:-}" ]; then
-            printf "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_basename}. Exiting...\n"
-            exit 1
+            die "\nCould not find correct reference based on species lookup in samplesheet ${samplesheet} (or wrong option passed for --single-species) for sample ${read_file_basename}. Exiting..."
         fi
 
         printf "\nFilter-based alignment mode was set: mapping to human reference genome ${ref_human} followed by mapping unaligned reads to parasite reference genome ${ref}.\n"

@@ -120,14 +120,12 @@ snpeff_conf="${PROJECT_ROOT}/config/snpEff.config"
 
 # check if vcf directory exist
 if [ ! -d "${vcf_dir}" ]; then
-    echo "VCF input directory (${vcf_dir}) does not exist."
-    exit 1
+    die "VCF input directory (${vcf_dir}) does not exist."
 fi
 
 # check if snpeff directory exists
 if ! [ -d "${snpeff_db}" ]; then
-    echo "SnpEff database not found in expected location: (${snpeff_db})."
-    exit 1
+    die "SnpEff database not found in expected location: (${snpeff_db})."
 fi
 
 # log run options
@@ -168,8 +166,7 @@ for species in ${species_list}; do
     elif [[ "${species}" == "pk" ]]; then
         ref="${ref_pk}"
     else
-        printf "\n Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
-        exit 1
+        die "Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
     fi
 
     # # create snpeff database

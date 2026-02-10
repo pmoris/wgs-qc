@@ -143,8 +143,7 @@ ref_pk="${PROJECT_ROOT}/data/ref/Pknowlesi/H/PlasmoDB/PlasmoDB-release-68/Plasmo
 # check if reference fasta files exists
 for ref in ${ref_pf} ${ref_pv} ${ref_poc} ${ref_pow} ${ref_pm} ${ref_pk}; do
     if ! [ -f "${ref}" ]; then
-        printf "\nReference fasta file not found (${ref}).\n"
-        exit 1
+        die "Reference fasta file not found (${ref})."
     fi
 done
 
@@ -193,8 +192,7 @@ for species in ${species_list}; do
     elif [[ "${species}" == "pk" ]]; then
         ref="${ref_pk}"
     else
-        printf "\n Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
-        exit 1
+        die "Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
     fi
 
     # Create reference fai and dict files if they do not yet exist
@@ -260,8 +258,7 @@ for species in ${species_list}; do
     elif [[ "${species}" == "pk" ]]; then
         ref="${ref_pk}"
     else
-        printf "\n Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
-        exit 1
+        die "Provided species ${species} not supported. Please use any of pf|pv|pm|pow|poc|pk."
     fi
 
     # skip if combined.filtered.vcf already exists
