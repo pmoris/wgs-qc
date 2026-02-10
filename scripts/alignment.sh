@@ -45,6 +45,7 @@ Usage: ${0##*/} [-h] [-s SAMPLESHEET.CSV ] [-o OUTPUT DIRECTORY ]
                                             pf, pv, pm poc, pow
     -c | --competitive                      Enable competitive mapping mode instead of
                                             first filtering against the human genome.
+    -k | --keep_filtered_fastq              Keep filtered (human decontaminated) fastq files.
 EOF
 }
 
@@ -164,6 +165,10 @@ while :; do
             competitive="true"
             ;;
 
+        -k|--keep_filtered_fastq)
+            keep_filtered_fastq="true"
+            ;;
+
         --)              # End of all options.
             shift
             break
@@ -210,8 +215,10 @@ elif [[ "${competitive:-}" == "true" ]]; then
     alignment_mode="competitive"
 else
     die "Alignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode."
-    printf "\nAlignment mode not set correctly. --competitive is a standalone option. Omitting it uses filter-based mode.\n"
-    exit 1
+fi
+
+if [[ "${competitive:-}" == "true" && "${keep_filtered_fastq:-}" == "true" ]]; then
+    die "Filtered fastq files cannot be kept when using competitive mapping mode."
 fi
 
 # config files
@@ -294,6 +301,7 @@ Reference Povale curtisi:   ${ref_poc}
 Reference Pknowlesi:        ${ref_pk}
 threads:                    ${n_threads}
 Alignment mode:             ${alignment_mode}
+Keep filtered fastq files:  ${keep_filtered_fastq}
 "
 
 ####################
@@ -316,7 +324,6 @@ for ref in ${ref_human} ${ref_pf} ${ref_pv} ${ref_pm} ${ref_pow} ${ref_poc} ${re
         printf "\nFound BWA index files for ${ref}, skipping indexing step...\n"
     fi
 done
-
 
 # map fastq read pairs using bwa
 for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
@@ -445,7 +452,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         # map to human reference genome first to remove host reads
         if [[ ! -f "${bam_dir}/${read_file_basename}.sort.human.bam" ]]; then
 
-            printf "\nCreating human bam file: %s.sort.human.bam\n" "${bam_dir}/${read_file_basename}"
+            printf "\nCreating human bam file: %s\n\n" "${bam_dir}/${read_file_basename}.sort.human.bam"
 
             bwa mem \
                 -t "${n_threads}" \
@@ -467,25 +474,55 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
         if [[ ! -f "${bam_dir}/${read_file_basename}.sort.bam" ]]; then
             # TODO: alternatively use bedtools' bamtofastq approach and save intermediate steps
             printf "\nMapping human filtered reads to %s genome for sample %s...\n" "${species}" "${read_file_basename}"
-            printf "\nCreating parasite bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
+            printf "Creating parasite bam file: %s.sort.bam\n" "${bam_dir}/${read_file_basename}"
 
-            samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
-            # convert back to fastq
-                samtools collate -Oun128 - |
-                samtools fastq -OT RG,BC - |
-            # map to plasmodium genome
-            # -CH adds back original read group info
-            # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
+            # save intermediate fastq file
+            if [[ ${keep_filtered_fastq:-} == "true" ]]; then
+                printf "Saving human filtered fastq files: %s\n\n" "${read_file_basename}_R1/2.filtered.fastq"
+
+                samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
+                    # convert back to fastq
+                    samtools collate -Oun128 - |
+                    samtools fastq \
+                        -1 "${bam_dir}/${read_file_basename}${read_1_suffix}.filtered.fastq" \
+                        -2 "${bam_dir}/${read_file_basename}${read_2_suffix}.filtered.fastq" \
+                        -0 /dev/null \
+                        -s /dev/null \
+                        -n
+
+                # align reads
                 bwa mem \
                     -t "${n_threads}" \
                     -Y -K 100000000 \
-                    -CH <(samtools view -H "${bam_dir}/${read_file_basename}.sort.human.bam" | grep ^@RG) \
-                    -p \
+                    -R "@RG\tID:${RG_ID}\tSM:${RG_SM}\tPL:ILLUMINA\tPU:${RG_PU}\tLB:${RG_LB}" \
                     "${ref}" \
-                    - |
-            # sort and compress to bam
-                samtools sort --threads "${n_threads}" \
-                    -o "${bam_dir}/${read_file_basename}.sort.bam"
+                    "${bam_dir}/${read_file_basename}${read_1_suffix}.filtered.fastq" \
+                    "${bam_dir}/${read_file_basename}${read_2_suffix}.filtered.fastq" |
+                    # sort and compress to bam
+                    samtools sort --threads "${n_threads}" \
+                        -o "${bam_dir}/${read_file_basename}.sort.bam"
+
+            # do not save intermediate fastq file
+            else
+                printf "Not extracting human filtered fastq files..."
+                samtools view -b -f 12 "${bam_dir}/${read_file_basename}.sort.human.bam" |
+                # convert back to fastq
+                    samtools collate -Oun128 - |
+                    samtools fastq -OT RG,BC - |
+                # map to plasmodium genome
+                # -CH adds back original read group info
+                # -p gathers paired reads from stream - https://github.com/samtools/samtools/issues/1306
+                    bwa mem \
+                        -t "${n_threads}" \
+                        -Y -K 100000000 \
+                        -CH <(samtools view -H "${bam_dir}/${read_file_basename}.sort.human.bam" | grep ^@RG) \
+                        -p \
+                        "${ref}" \
+                        - |
+                # sort and compress to bam
+                    samtools sort --threads "${n_threads}" \
+                        -o "${bam_dir}/${read_file_basename}.sort.bam"
+            fi
         else
             # skip parasite alignment if .sort.bam file is already present
             printf "\nParasite aligned BAM files found for ${read_file_basename}, skipping...\n"
@@ -578,7 +615,7 @@ for r1 in "${trimmed_fastq_dir}"/*${read_1_suffix}.trim.fastq.gz; do
     # mv "${bam_dir}/${read_file_basename}.sort.human.bam.fixed" "${bam_dir}/${read_file_basename}.sort.human.bam"
     ################
 
-    printf "\nFinished aligning reads in ${read_file_path} R1/R2.\n----------------\n"
+    printf "\nFinished aligning reads for filtered fastq pair ${read_file_path} R1/R2.\n----------------\n"
 done
 
 # picard mark duplicates
@@ -634,7 +671,8 @@ function run_markduplicates() {
         printf "\nDuplicate-marked BAM file found for ${1}, skipping...\n"
         # return 0;
     else
-        printf "\nCombining and marking duplicates for sample ${1} using input files: $(add_input_prefix ${1}).\n"
+        printf "\nCombining and marking duplicates for sample ${1} using input files: $(add_input_prefix ${1})\n"
+
         gatk --java-options -Xmx${mem}G \
             MarkDuplicates \
                 $(add_input_prefix "${1}") \
