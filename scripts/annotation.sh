@@ -93,6 +93,21 @@ while :; do
             die 'ERROR: "--single_species" requires a non-empty option argument.'
             ;;
 
+        --snpeff_config)       # Takes an option argument; ensure it has been specified.
+            if [ "$2" ]; then
+                snpeff_config=$2
+                shift
+            else
+                die 'ERROR: "--snpeff_config" requires a non-empty option argument.'
+            fi
+            ;;
+        --snpeff_config=?*)
+            snpeff_config=${1#*=} # Delete everything up to "=" and assign the remainder.
+            ;;
+        --snpeff_config=)         # Handle the case of an empty --samplesheet=
+            die 'ERROR: "--samplesheet" requires a non-empty option argument.'
+            ;;
+
         --)              # End of all options.
             shift
             break
@@ -137,8 +152,8 @@ ref_pk="PlasmoDB-68_PknowlesiH"
 
 # config files
 multiqc_conf="${PROJECT_ROOT}/config/multiqc_config.yaml"
-snpeff_db="${PROJECT_ROOT}/data/snpEff_database/"
-snpeff_conf="${PROJECT_ROOT}/config/snpEff.config"
+# snpeff_conf="${PROJECT_ROOT}/config/snpEff.config"    # set this via cli option instead
+# snpeff_db="${PROJECT_ROOT}/data/snpEff_database/"     # not used but could be set via -dataDir if needed (relative path from snpEff.config)
 
 # check if samplesheet exist
 if [ ! -f "${samplesheet}" ]; then
@@ -150,10 +165,15 @@ if [ ! -d "${vcf_dir}" ]; then
     die "VCF input directory (${vcf_dir}) does not exist."
 fi
 
-# check if snpeff directory exists
-if ! [ -d "${snpeff_db}" ]; then
-    die "SnpEff database not found in expected location: (${snpeff_db})."
+# check if snpeff config file exists
+if ! [ -d "${snpeff_config}" ]; then
+    die "SnpEff config file not found in expected location: (${snpeff_config})."
 fi
+
+# # check if snpeff directory exists
+# if ! [ -d "${snpeff_db}" ]; then
+#     die "SnpEff database not found in expected location: (${snpeff_db})."
+# fi
 
 # log run options
 printf "
